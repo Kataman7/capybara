@@ -1,0 +1,9 @@
+{
+  "dependencies": {
+    "discord.js": "^14.14.1",
+    "mysql": "^2.18.1",
+    "openai": "^4.20.1",
+    "pastebin-api": "^7.0.0",
+    "sql": "^0.78.0"
+  }
+}
