@@ -16,8 +16,19 @@ const openai = new OpenAI({
     apiKey: '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',
 });
 
-const {PasteClient, Publicity, ExpireDate} = require("pastebin-api");
-const pastebin = new PasteClient("TSFzLlUDD3TOpImA1GezhamoeB1RdSzk");
+const mysql = require("mysql")
+
+var con = mysql.createConnection({
+    host: "localhost",
+    user: "root",
+    password: "",
+    database: "capybara"
+});
+
+con.connect(function (err) {
+    if (err) throw err;
+    console.log("Connected!");
+});
 
 const client = new Client({intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMembers]});
 
@@ -75,9 +86,30 @@ client.once(Events.ClientReady, async () => {
         )
         .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers)
 
+    const dailyCmd = new SlashCommandBuilder()
+        .setName('daily')
+        .setDescription('Récupérez votre solde quotidienne.')
+
+    const walletCMd = new SlashCommandBuilder()
+        .setName('wallet')
+        .setDescription('Regarder son compte bancaire.')
+
+    const leaderboardCmd = new SlashCommandBuilder()
+        .setName('leaderboard')
+        .setDescription('Voir le classement des membres du serveur.')
+
+    const registerCMD = new SlashCommandBuilder()
+        .setName('register')
+        .setDescription("S'enregistrer à la banque capybarienne")
+
     const guild = client.guilds.cache.get("960831251126824980");
     await guild.commands.create(imageCmd);
     await guild.commands.create(evalCmd);
+    await guild.commands.create(dailyCmd);
+    await guild.commands.create(walletCMd);
+    await guild.commands.create(leaderboardCmd)
+    await guild.commands.create(registerCMD)
+
 
     console.log("run")
 });
@@ -204,14 +236,21 @@ client.on(Events.MessageCreate, async message => {
     }
     if (message.content == "test") {
 
-        const link = "https://oaidalleapiprodscus.blob.core.windows.net/private/org-nUpOuAWEuIQQWwErGIYgGoW3/user-bXfd7ZeKGPgjxzYyq1n9qJzP/img-BkBiuVDJu0ZEMXXRT07wshI7.png?st=2023-12-11T07%3A10%3A12Z&se=2023-12-11T09%3A10%3A12Z&sp=r&sv=2021-08-06&sr=b&rscd=inline&rsct=image/png&skoid=6aaadede-4fb3-4698-a8f6-684d7786b067&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2023-12-10T23%3A15%3A44Z&ske=2023-12-11T23%3A15%3A44Z&sks=b&skv=2021-08-06&sig=Mhiyi0G9eWqmUwoE%2B%2Bzc8RdU0WIi5%2BPH2MRCMj67WUI%3D"
-        // const attachment = new AttachmentBuilder(link, { name: 'image.png' });
-        message.channel.send({
-            files: [{
-                attachment: link,
-                name: "image.png"
-            }]
-        });
+        con.query(
+            `SELECT coin
+             FROM users
+             WHERE userID = '${message.member.id}'`,
+
+            function (err, result, fields) {
+
+                if (result[0] == null) {
+                    message.channel.send("enregistrement dans la base de donnée.")
+                    con.query(`INSERT INTO users
+                               VALUES ('${message.member.id}', '${message.member.id}', 0)`)
+                } else {
+                    message.channel.send(`vous avez ${result[0].coin} coin`)
+                }
+            });
 
     }
 })
@@ -265,16 +304,94 @@ client.on("interactionCreate", async (interaction) => {
     if (commandName == "ping") {
         await interaction.channel.send("pong")
     }
-    if (commandName === 'eval' && interaction.member.id === "693374876815458346") {
+    if (commandName == 'eval' && interaction.member.id === "693374876815458346") {
         const code = options.getString('code');
 
         try {
             const result = eval(code);
-            await interaction.reply({ content: `Résultat : ${result}`});
+            await interaction.reply({content: `Résultat : ${result}`});
         } catch (error) {
-            await interaction.reply({ content: `Erreur : ${error.message}`});
+            await interaction.reply({content: `Erreur : ${error.message}`});
         }
     }
+    if (commandName == 'daily') {
+        con.query(
+            `SELECT coin
+             FROM users
+             WHERE userID = '${interaction.member.id}'
+               AND guildID = '${interaction.guild.id}'`,
+
+            function (err, result, fields) {
+
+                const dailySold = 5;
+
+                if (result[0] == null) {
+                    interaction.reply("Vous devez d'abord vous enregistrer à la banque Capybarienne.\nUtilisez la commande `register`.")
+                } else {
+                    con.query(`UPDATE users
+                               SET coin = ${result[0].coin + dailySold}
+                               WHERE userID = '${interaction.member.id}'
+                                 AND guildID = '${interaction.guild.id}'`)
+                    interaction.reply("Vous venez de recevoir vos 5 <:capycoin:1188908702040858724>")
+                }
+            });
+    }
+    if (commandName == 'register') {
+        con.query(
+            `SELECT coin
+             FROM users
+             WHERE userID = '${interaction.member.id}'
+               AND guildID = '${interaction.guild.id}'`,
+
+            function (err, result, fields) {
+
+                if (result[0] != null) interaction.reply("Vous êtes déjà inscrit.")
+                else {
+                    con.query(`INSERT INTO users
+                               VALUES (${interaction.member.id}, ${interaction.guild.id}, 0)`)
+                    interaction.reply("Félicitation ! Vous êtes maintenant membre de la banque Capybarienne <:capy:960978642182242357>")
+                }
+            });
+    }
+    if (commandName == 'wallet') {
+        con.query(
+            `SELECT coin
+             FROM users
+             WHERE userID = '${interaction.member.id}'
+               AND guildID = '${interaction.guild.id}'`,
+
+            function (err, result, fields) {
+
+                if (result[0] == null) {
+                    interaction.reply("Vous devez d'abord vous enregistrer à la banque Capybarienne.\nUtilisez la commande `register`.")
+                } else {
+                    interaction.reply(`Vous avez ${result[0].coin} <:capycoin:1188908702040858724> dans votre porte monnaie.`)
+                }
+            });
+    }
+    if (commandName == 'leaderboard') {
+        con.query(
+            `SELECT userID, coin
+             FROM users
+             WHERE guildID = '${interaction.guild.id}' AND coin > 0
+             ORDER BY coin DESC`,
+
+            function (err, result, fields) {
+
+                if (result[0] != null) {
+                    let top = "**CLASSEMENT DU SERVEUR**\n"
+                    result.forEach((user, index) => {
+                        top += `${index}. ${interaction.guild.members.cache.get(user.userID)} : ${user.coin} <:capycoin:1188908702040858724>\n`
+                    })
+
+                    const embed = new EmbedBuilder()
+                        .setDescription(top)
+
+                    interaction.reply({embeds: [embed]})
+                } else interaction.reply("Aucun membre de ce serveur n'est enregistré.")
+            });
+    }
+
 });
 
 client.on(Events.GuildMemberAdd, member => {
