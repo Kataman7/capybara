@@ -140,11 +140,11 @@ client.on(Events.MessageCreate, async message => {
 
     addXp(message.author, message.guild);
 
-    if (message.content.includes("<@959427012194349088>") || Math.random() >= 0.985) {
+    if (message.content.includes("<@959427012194349088>") || Math.random() >= 0.982) {
 
         message.channel.sendTyping();
 
-        messageMemory.push({ role: `user`, content: `USER ${message.author.displayName} : ${message.content}` })
+        messageMemory.push({ role: `user`, content: `${message.author.nickname} s'adresse à toi : "${message.content.replace("<@959427012194349088>", "Le Capybara")}"` })
 
         if (messageMemory.length >= 30) {
             messageMemory.splice(-2, 1);
