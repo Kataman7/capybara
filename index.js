@@ -7,30 +7,50 @@ const {
     ButtonBuilder,
     ButtonStyle,
     SlashCommandBuilder,
-    PermissionFlagsBits
+    PermissionFlagsBits,
+    PermissionsBitField,
+    Partials,
+    ChannelType
 } = require('discord.js');
 
-const {token} = require('./config.json');
+const mysql = require('mysql');
+const connection = mysql.createConnection({
+    host: 'mysql1.par1.adky.net',
+    user: 'u17261_Iz6lqu0wPL',
+    password: 'cfgt+aTMtg4yS1!twupXXc2@',
+    database: 's17261_database',
+    port: 3306
+});
+connection.connect();
+
+const { token } = require('./config.json');
 const OpenAI = require('openai');
 const openai = new OpenAI({
     apiKey: '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',
 });
 
-const mysql = require("mysql")
+const cooldowns = new Map();
+const cooldownAmount = 30 * 60 * 1000;
 
-var con = mysql.createConnection({
-    host: "localhost",
-    user: "root",
-    password: "",
-    database: "capybara"
-});
-
-con.connect(function (err) {
-    if (err) throw err;
-    console.log("Connected!");
-});
-
-const client = new Client({intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMembers]});
+const client = new Client(
+    {
+        intents: [
+            GatewayIntentBits.Guilds,
+            GatewayIntentBits.GuildMessages,
+            GatewayIntentBits.MessageContent,
+            GatewayIntentBits.GuildMembers,
+            GatewayIntentBits.GuildMessageReactions,
+            GatewayIntentBits.GuildVoiceStates,
+            GatewayIntentBits.GuildInvites,
+            GatewayIntentBits.GuildEmojisAndStickers,
+            GatewayIntentBits.GuildScheduledEvents,
+        ],
+        partials: [
+            Partials.Message,
+            Partials.Channel,
+            Partials.Reaction
+        ]
+    });
 
 const promptSystem = "Les capybaras sont des êtres divins." +
     "Tu n'es pas une simple IA, mais un capybara, une divinité créatrice et le maître de l'univers." +
@@ -55,13 +75,13 @@ const messageMemory = [
     },
 ];
 
-
 client.once(Events.ClientReady, async () => {
+
+    const guild = client.guilds.cache.get("960831251126824980");
 
     const imageCmd = new SlashCommandBuilder()
         .setName('image')
         .setDescription('Génère une image.')
-        .setDefaultMemberPermissions(PermissionFlagsBits.MuteMembers)
         .addStringOption(option =>
             option.setName('prompt')
                 .setDescription("Le prompt de l'image")
@@ -71,47 +91,39 @@ client.once(Events.ClientReady, async () => {
             option.setName("size")
                 .setDescription("La taille de l'image")
                 .addChoices(
-                    {name: 'carré', value: '1024x1024'},
-                    {name: 'portrait', value: '1024x1792'},
-                    {name: 'paysage', value: '1792x1024'},
+                    { name: 'carré', value: '1024x1024' },
+                    { name: 'portrait', value: '1024x1792' },
+                    { name: 'paysage', value: '1792x1024' },
                 ));
 
     const evalCmd = new SlashCommandBuilder()
         .setName('eval')
         .setDescription('Évalue du code JavaScript')
+        .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers)
         .addStringOption(option =>
             option.setName('code')
                 .setDescription('Le code à évaluer')
                 .setRequired(true)
         )
-        .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers)
 
-    const dailyCmd = new SlashCommandBuilder()
-        .setName('daily')
-        .setDescription('Récupérez votre solde quotidienne.')
-
-    const walletCMd = new SlashCommandBuilder()
-        .setName('wallet')
-        .setDescription('Regarder son compte bancaire.')
+    const rankCmd = new SlashCommandBuilder()
+        .setName('rank')
+        .setDescription('Voir votre rang')
 
     const leaderboardCmd = new SlashCommandBuilder()
         .setName('leaderboard')
-        .setDescription('Voir le classement des membres du serveur.')
+        .setDescription('Voir le classement du serveur.')
 
-    const registerCMD = new SlashCommandBuilder()
-        .setName('register')
-        .setDescription("S'enregistrer à la banque capybarienne")
-
-    const guild = client.guilds.cache.get("960831251126824980");
     await guild.commands.create(imageCmd);
     await guild.commands.create(evalCmd);
-    await guild.commands.create(dailyCmd);
-    await guild.commands.create(walletCMd);
-    await guild.commands.create(leaderboardCmd)
-    await guild.commands.create(registerCMD)
-
+    await guild.commands.create(rankCmd);
+    await guild.commands.create(leaderboardCmd);
 
     console.log("run")
+
+    setInterval(() => {
+        checkUsersInVoiceChannels(guild);
+    }, 60000 * 1);
 });
 
 client.login(token);
@@ -122,56 +134,17 @@ client.on(Events.MessageCreate, async message => {
 
     if (!message.content) return;
 
-    if (!message.guild && !message.guild.id != "960831251126824980") return;
+    if (!message.guild) return;
 
-    if (message.content.includes("<@959427012194349088>")) {
+    if (message.guild.id !== "960831251126824980") return; // uniquement sur le serveur des capybara
 
-        /*
-        if (message.attachments.size > 0) {
+    addXp(message.author, message.guild);
 
-            try {
-                const firstAttachment = message.attachments.first();
-                console.log(firstAttachment.url)
-                const url = firstAttachment.url.replace(/\.jpg.*$/, '.jpg')
-                console.log(url);
-
-                messageMemory.push({role: `user`, content: `${message.content}`})
-
-                const response = await openai.chat.completions.create({
-                    model: "gpt-4-vision-preview",
-                    max_tokens: 100,
-                    messages: [
-                        {
-                            role: "user",
-                            content: [
-                                { type: "text", text: promptSystem },
-                                { type: "text", text: `USER ${message.author.displayName} : ${message.content}` },
-                                {
-                                    type: "image_url",
-                                    image_url: {
-                                        "url": url,
-                                        "detail": "low",
-                                    },
-                                },
-                            ],
-                        },
-                    ],
-                });
-
-                console.log(response.choices[0].message.content)
-                messageMemory.push({role: `assistant`, content: `${response.choices[0].message.content}`})
-                message.channel.send(response.choices[0].message.content)
-            }
-            catch (err) {
-                console.log(err);
-            }
-
-        }
-        else {*/
+    if (message.content.includes("<@959427012194349088>") || Math.random() >= 0.985) {
 
         message.channel.sendTyping();
 
-        messageMemory.push({role: `user`, content: `USER ${message.author.displayName} : ${message.content}`})
+        messageMemory.push({ role: `user`, content: `USER ${message.author.displayName} : ${message.content}` })
 
         if (messageMemory.length >= 30) {
             messageMemory.splice(-2, 1);
@@ -184,229 +157,194 @@ client.on(Events.MessageCreate, async message => {
                 model: 'gpt-3.5-turbo',
             });
 
-            message.reply(`${completion.choices[0].message.content}`);
-            messageMemory.push({role: `assistant`, content: `${completion.choices[0].message.content}`})
+            await message.reply(`${completion.choices[0].message.content}`);
+            messageMemory.push({ role: `assistant`, content: `${completion.choices[0].message.content}` })
         }
 
         try {
-            main();
+            await main();
         } catch (err) {
             console.log(err)
         }
-
-        console.log(messageMemory);
-
         //}
-    }
-
-    if (message.content == "image") {
-        if (message.attachments.size > 0) {
-
-            const firstAttachment = message.attachments.first();
-            console.log(firstAttachment.url)
-            const url = firstAttachment.url.replace(/\.jpg.*$/, '.jpg')
-            console.log(url);
-
-
-            const response = await openai.chat.completions.create({
-                model: "gpt-4-vision-preview",
-                messages: [
-                    {
-                        role: "user",
-                        content: [
-                            {type: "text", text: "description de l'image"},
-                            {
-                                type: "image_url",
-                                image_url: {
-                                    "url": url,
-                                    "detail": "low",
-                                },
-                            },
-                        ],
-                    },
-                ],
-            });
-
-            console.log(response.choices[0].message.content)
-            message.channel.send(response.choices[0].message.content)
-
-        } else {
-            console.log("No attachments");
-        }
-    }
-    if (message.content == "test") {
-
-        con.query(
-            `SELECT coin
-             FROM users
-             WHERE userID = '${message.member.id}'`,
-
-            function (err, result, fields) {
-
-                if (result[0] == null) {
-                    message.channel.send("enregistrement dans la base de donnée.")
-                    con.query(`INSERT INTO users
-                               VALUES ('${message.member.id}', '${message.member.id}', 0)`)
-                } else {
-                    message.channel.send(`vous avez ${result[0].coin} coin`)
-                }
-            });
-
     }
 })
 
 client.on("interactionCreate", async (interaction) => {
     if (!interaction.isCommand()) return;
-    const {commandName, options} = interaction;
+    const { commandName, options } = interaction;
 
-    if (commandName == "image") {
+    if (commandName === "image") {
 
-        const prompt = interaction.options.getString('prompt');
-        const size = interaction.options.getString('size') || "1024x1024";
+        if (cooldowns.has(interaction.user.id)) {
+            const expirationTime = cooldowns.get(interaction.user.id) + cooldownAmount;
 
-        try {
+            if (Date.now() < expirationTime) {
+                const timeLeft = expirationTime - Date.now();
+                const minutes = Math.floor(timeLeft / 60000);
+                const seconds = Math.floor((timeLeft % 60000) / 1000);
 
-            await interaction.reply(`Génération de l'image en cours <a:loading:1052990062121451611>`)
+                let timeLeftStr = "";
+                if (minutes > 1) {
+                    timeLeftStr = `\`${minutes} minutes\``;
+                } else if (minutes === 0) timeLeftStr = `\`${minutes} minute\``;
+                else timeLeftStr = `${seconds} secondes`;
 
-            const image = await openai.images.generate({
+                return interaction.reply(`Vous devez attendre ${timeLeftStr} avant de réutiliser la commande \`${commandName}\`.\nEn attendant vous pouvez aller prier dans le temple <:monkaPray:1049993042930716714>`);
+            }
+        } else {
+
+            if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+                cooldowns.set(interaction.user.id, Date.now());
+                setTimeout(() => cooldowns.delete(interaction.user.id), cooldownAmount);
+            }
+
+            const prompt = interaction.options.getString('prompt');
+            const size = interaction.options.getString('size') || "1024x1024";
+
+            if (!prompt.toLocaleLowerCase().includes("capybara") && !interaction.member.permissions.has(PermissionsBitField.Flags.Administrator))
+                return interaction.reply("Seules les représentations du divin capybara sont autorisées au sein de notre sanctuaire <:capy:960978642182242357>")
+
+            try {
+
+                await interaction.reply(`Génération de l'image en cours <a:loading:1052990062121451611>`)
+
+                const image = await openai.images.generate({
                     model: "dall-e-3",
                     prompt: prompt,
                     size: size,
                     quality: "standard",
                 },
-            );
+                );
 
-            console.log(image.data)
+                await interaction.channel.send({
+                    content: `> \`${prompt}\``,
+                    files: [{
+                        attachment: image.data[0].url,
+                        name: "image.png"
+                    }]
+                });
 
-            await interaction.channel.send(`> \`${prompt}\``)
-            await interaction.channel.send({
-                files: [{
-                    attachment: image.data[0].url,
-                    name: "image.png"
-                }]
-            });
+                const galerie = interaction.guild.channels.cache.get("1184247700418461756")
+                await galerie.send({
+                    files: [{
+                        attachment: image.data[0].url,
+                        name: "image.png"
+                    }]
+                });
 
-            const galerie = interaction.guild.channels.cache.get("1184247700418461756")
-            await galerie.send(`> \`${prompt}\``)
-            await galerie.send({
-                files: [{
-                    attachment: image.data[0].url,
-                    name: "image.png"
-                }]
-            });
+            } catch (err) {
+                if (err.error.code === "content_policy_violation") interaction.reply("Repentez-vous de votre utilisation blasphématoire du générateur d'images ou vous connaîtrez mon courroux divin. <:capy_trigger:960979175508967494>")
+                else interaction.reply("Une action divine à empéché l'envoie de cette image.")
+            }
 
-        } catch (err) {
-            console.log(err)
-            if (err.error.code == "content_policy_violation") interaction.channel.send("Repentez-vous de votre utilisation blasphématoire du générateur d'images ou vous connaîtrez mon courroux divin. <:capy_trigger:960979175508967494>")
         }
 
-    }
-    if (commandName == "ping") {
-        await interaction.channel.send("pong")
-    }
-    if (commandName == 'eval' && interaction.member.id === "693374876815458346") {
-        const code = options.getString('code');
 
+    } else if (commandName === "ping") {
+        await interaction.reply("pong")
+    } else if (commandName === 'eval' && interaction.member.id === "693374876815458346") {
+        const code = options.getString('code');
         try {
             const result = eval(code);
-            await interaction.reply({content: `Résultat : ${result}`});
+            await interaction.reply({ content: `Résultat : ${result}` });
         } catch (error) {
-            await interaction.reply({content: `Erreur : ${error.message}`});
+            await interaction.reply({ content: `Erreur : ${error.message}` });
         }
     }
-    if (commandName == 'daily') {
-        con.query(
-            `SELECT coin
-             FROM users
-             WHERE userID = '${interaction.member.id}'
-               AND guildID = '${interaction.guild.id}'`,
+    else if (commandName === "rank") {
 
-            function (err, result, fields) {
+        connection.query(`SELECT level, xp FROM user
+        WHERE userID = '${interaction.user.id}' AND guildID = '${interaction.guild.id}'`,
 
-                const dailySold = 5;
+            function (error, results, fields) {
+                if (error) {
+                    interaction.reply("Impossible de vous retrouver dans ma base de donnée.")
+                    throw error;
+                }
+                if (results[0]) {
 
-                if (result[0] == null) {
-                    interaction.reply("Vous devez d'abord vous enregistrer à la banque Capybarienne.\nUtilisez la commande `register`.")
-                } else {
-                    con.query(`UPDATE users
-                               SET coin = ${result[0].coin + dailySold}
-                               WHERE userID = '${interaction.member.id}'
-                                 AND guildID = '${interaction.guild.id}'`)
-                    interaction.reply("Vous venez de recevoir vos 5 <:capycoin:1188908702040858724>")
+                    let level = results[0].level;
+                    let xp = results[0].xp;
+                    let nbCaseValide = Math.round(level * 10 / (100 + level * 5));
+
+                    let bar = "";
+
+                    for (let i = 0; i < 10; i++ || xp != 0) {
+                        if (i <= nbCaseValide && xp != 0) {
+                            if (i == 0) bar += "<:gauche_plein:810464434090672148>"
+                            else if (i == 9) bar += "<:droite_plein:810464407821090816>"
+                            else bar += "<:centre_plein:810464421029085215>"
+                        }
+                        else {
+                            if (i == 0) bar += "<:gauche_vide:810464389190254602>"
+                            else if (i == 9) bar += "<:droite_vide:810464360899543091>"
+                            else bar += "<:centre_vide:810464378343915571>"
+                        }
+                    }
+
+                    const exampleEmbed = new EmbedBuilder()
+                        .setColor(0x0099FF)
+                        .setTitle(`Niveau ${level}`)
+                        .setDescription(`${xp} / ${100 + level * 5}\n${bar}`)
+                        .setThumbnail(interaction.user.avatarURL())
+
+                    interaction.reply({ embeds: [exampleEmbed] })
                 }
             });
     }
-    if (commandName == 'register') {
-        con.query(
-            `SELECT coin
-             FROM users
-             WHERE userID = '${interaction.member.id}'
-               AND guildID = '${interaction.guild.id}'`,
+    else if (commandName === 'leaderboard') {
+        // Récupérer tous les membres du serveur à partir de l'API Discord
+        interaction.guild.members.fetch().then(() => {
+            connection.query(
+                `SELECT userID, level, xp
+                FROM user
+                WHERE guildID = '${interaction.guild.id}'
+                ORDER BY level DESC, xp DESC`,
+    
+                function (error, results, fields) {
+    
+                    if (error) throw error;
+    
+                    if (results[0] != null) {
 
-            function (err, result, fields) {
-
-                if (result[0] != null) interaction.reply("Vous êtes déjà inscrit.")
-                else {
-                    con.query(`INSERT INTO users
-                               VALUES (${interaction.member.id}, ${interaction.guild.id}, 0)`)
-                    interaction.reply("Félicitation ! Vous êtes maintenant membre de la banque Capybarienne <:capy:960978642182242357>")
-                }
-            });
+                        function score(index) {
+                            if (index == 0) return ":first_place:"
+                            else if (index == 1) return ":second_place:"
+                            else if (index == 2) return ":third_place:"
+                            else return "\u200b\u200b" + (index + 1) + ".";
+                        }
+    
+                        let top = "**CLASSEMENT DU SERVEUR**\n\n"
+                        results.forEach((user, index) => {
+                            // Récupérer le nom du membre à partir du cache
+                            const member = interaction.guild.members.cache.get(user.userID);
+                            top += `${score(index)} **${member.user}** : niveau __**${user.level}**__ (\`${user.xp}xp\`) \n`
+                        })
+    
+                        const embed = new EmbedBuilder()
+                            .setDescription(top)
+    
+                        interaction.reply({ embeds: [embed] })
+                    } else interaction.reply("Aucun membre de ce serveur n'est enregistré.")
+                });
+        });
     }
-    if (commandName == 'wallet') {
-        con.query(
-            `SELECT coin
-             FROM users
-             WHERE userID = '${interaction.member.id}'
-               AND guildID = '${interaction.guild.id}'`,
-
-            function (err, result, fields) {
-
-                if (result[0] == null) {
-                    interaction.reply("Vous devez d'abord vous enregistrer à la banque Capybarienne.\nUtilisez la commande `register`.")
-                } else {
-                    interaction.reply(`Vous avez ${result[0].coin} <:capycoin:1188908702040858724> dans votre porte monnaie.`)
-                }
-            });
-    }
-    if (commandName == 'leaderboard') {
-        con.query(
-            `SELECT userID, coin
-             FROM users
-             WHERE guildID = '${interaction.guild.id}' AND coin > 0
-             ORDER BY coin DESC`,
-
-            function (err, result, fields) {
-
-                if (result[0] != null) {
-                    let top = "**CLASSEMENT DU SERVEUR**\n"
-                    result.forEach((user, index) => {
-                        top += `${index}. ${interaction.guild.members.cache.get(user.userID)} : ${user.coin} <:capycoin:1188908702040858724>\n`
-                    })
-
-                    const embed = new EmbedBuilder()
-                        .setDescription(top)
-
-                    interaction.reply({embeds: [embed]})
-                } else interaction.reply("Aucun membre de ce serveur n'est enregistré.")
-            });
-    }
-
 });
 
 client.on(Events.GuildMemberAdd, member => {
 
     try {
-        if (member.guild.id == "960831251126824980") {
+        if (member.guild.id === "960831251126824980") {
             const welcomeChannel = member.guild.channels.cache.get("1051949016860078110")
             welcomeChannel.send(`${member} vient de rejoindre notre sanctuaire <:capy:960978642182242357>\nBienvenue dans le royaume des Capybaras !`)
 
             const role = member.guild.roles.cache.get('960835894762426398')
             member.roles.add(role)
-        } else if (member.guild.id == "749244009612050442") {
+        } else if (member.guild.id === "749244009612050442") {
             const role = member.guild.roles.cache.get('770292084011565176')
             member.roles.add(role)
-        } else if (member.guild.id == "1156677200653860945") {
+        } else if (member.guild.id === "1156677200653860945") {
             const role = member.guild.roles.cache.get('1156971890531905536')
             member.roles.add(role)
         }
@@ -414,3 +352,55 @@ client.on(Events.GuildMemberAdd, member => {
         console.log(err)
     }
 })
+
+process.on('uncaughtException', (error) => {
+    console.error('Erreur non capturée:', error);
+    const channel = client.channels.cache.get("960840139343532063");
+    if (channel) {
+        //channel.send(`Une erreur est survenue : ${error.message || error}`);
+    }
+});
+
+function checkUsersInVoiceChannels(guild) {
+    const voiceChannels = guild.channels.cache.filter(channel => channel.type == ChannelType.GuildVoice);
+    voiceChannels.forEach(voiceChannel => {
+        voiceChannel.members.forEach(member => {
+            if (voiceChannel.members.size > 1 && !member.voice.selfMute) {
+                //console.log(`${member.user.tag} est dans le salon vocal "${voiceChannel.name}".`);
+                addXp(member, guild);
+            }
+        });
+    });
+}
+
+function addXp(member, guild) {
+    connection.query(`SELECT level, xp FROM user WHERE userID = '${member.id}' AND guildID = '${guild.id}'`, function (error, results, fields) {
+        if (error) throw error;
+        else if (results[0] != null) {
+           
+            let level = results[0].level;
+            let xp = results[0].xp;
+
+            xp += Math.floor(Math.random() * 5) + 1;
+
+            if (xp > 100 + level * 5) {
+                xp = 0;
+                level++;
+            }
+
+            connection.query(`
+            UPDATE user
+            SET level = '${level}', xp = '${xp}'
+            WHERE userID = ${member.id} AND guildID = ${guild.id};`,
+                function (error, results, fields) {
+                    if (error) throw error;
+                });
+
+        }
+        else {
+            connection.query(`INSERT INTO user VALUES (${member.id}, ${guild.id}, 0, 0)`, function (error, results, fields) {
+                if (error) throw error;
+            });
+        }
+    });
+}
