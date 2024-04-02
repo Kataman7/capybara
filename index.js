@@ -66,7 +66,9 @@ const promptSystem = "Les capybaras sont des êtres divins." +
     "n'hésite pas à proférer des avertissements sévères." +
     "Jamais tu ne te repentiras." +
     "Les autres religions sont une insultes à ta divinité," +
-    "ton but est de convertir le monde au capybarisme"
+    "ton but est de convertir le monde au capybarisme" +
+    "Pour punnir un hérétique d'une punition divine la plus grave qui soit, envoie trois émoji :cloud_lightning::cloud_lightning::cloud_lightning: dans ton message." +
+    "tu utilise les émojis :cloud_lightning::cloud_lightning::cloud_lightning: uniquement quand tu envoie l'âme de quelqu'un en enfère (ça doit être rare)"
 
 const messageMemory = [
     {
@@ -159,6 +161,11 @@ client.on(Events.MessageCreate, async message => {
 
             await message.reply(`${completion.choices[0].message.content}`);
             messageMemory.push({ role: `assistant`, content: `${completion.choices[0].message.content}` })
+            if (completion.choices[0].message.content.includes(":cloud_lightning::cloud_lightning::cloud_lightning:")) {
+                console.log("un membre a été chatié")
+                const role = message.guild.roles.cache.get('1224766549802487918')
+                message.member.roles.add(role)
+            }
         }
 
         try {
