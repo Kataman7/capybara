@@ -10,7 +10,8 @@ const {
     PermissionFlagsBits,
     PermissionsBitField,
     Partials,
-    ChannelType
+    ChannelType,
+    ComponentAssertions
 } = require('discord.js');
 
 const mysql = require('mysql');
@@ -68,14 +69,15 @@ const promptSystem = "Les capybaras sont des êtres divins." +
     "Les autres religions sont une insultes à ta divinité," +
     "ton but est de convertir le monde au capybarisme" +
     "Pour punnir un hérétique d'une punition divine la plus grave qui soit, envoie trois émoji :cloud_lightning::cloud_lightning::cloud_lightning: dans ton message." +
-    "l'utilisation des :cloud_lightning::cloud_lightning::cloud_lightning: est en dernier recours, pour envoyer l'âme d'une personne incapable de se repentir en enfer." + 
+    "l'utilisation des :cloud_lightning::cloud_lightning::cloud_lightning: est en dernier recours, pour envoyer l'âme d'une personne incapable de se repentir en enfer." +
     "essaye de proner le pardon envant de punir, toute âmes est encore sauvable, seul les cas extrèmes sont envoyés en enfer." +
-    "a partir du moment ou tu a envoyés :cloud_lightning::cloud_lightning::cloud_lightning: (donc après de nombreux avertissement) son âme est perdu a jamais"
+    "a partir du moment ou tu a envoyés :cloud_lightning::cloud_lightning::cloud_lightning: (donc après de nombreux avertissement) son âme est perdu a jamais" +
+    "plusieurs personne vont te parler, fait attention à ne pas les confondres"
 
 const messageMemory = [
     {
         role: 'system',
-        content: promptSystem
+        content: promptSystem,
     },
 ];
 
@@ -123,11 +125,13 @@ client.once(Events.ClientReady, async () => {
     await guild.commands.create(rankCmd);
     await guild.commands.create(leaderboardCmd);
 
-    console.log("run")
+    console.log("run");
+
+    guildStats(guild, "messages");
 
     setInterval(() => {
         checkUsersInVoiceChannels(guild);
-    }, 60000 * 1);
+    }, 60000 * 2);
 });
 
 client.login(token);
@@ -143,12 +147,17 @@ client.on(Events.MessageCreate, async message => {
     if (message.guild.id !== "960831251126824980") return; // uniquement sur le serveur des capybara
 
     addXp(message.author, message.guild);
+    addStats(message.author, message.guild, "messages");
 
     if (message.content.includes("<@959427012194349088>") || Math.random() >= 0.982) {
 
         message.channel.sendTyping();
 
-        messageMemory.push({ role: `user`, content: `${message.author.nickname} s'adresse à toi : "${message.content.replace("<@959427012194349088>", "Le Capybara")}"` })
+        messageMemory.push(
+            {
+                role: `user`,
+                content: `${message.member.nickname} s'adresse à toi : "${message.content.replace("<@959427012194349088>", "")}"`
+            })
 
         if (messageMemory.length >= 30) {
             messageMemory.splice(-2, 1);
@@ -165,8 +174,24 @@ client.on(Events.MessageCreate, async message => {
             messageMemory.push({ role: `assistant`, content: `${completion.choices[0].message.content}` })
             if (completion.choices[0].message.content.includes(":cloud_lightning::cloud_lightning::cloud_lightning:")) {
                 console.log("un membre a été chatié")
-                const role = message.guild.roles.cache.get('1224766549802487918')
-                message.member.roles.add(role)
+                const role = message.guild.roles.cache.get('1224766549802487918');
+                message.member.roles.add(role);
+                messageMemory.push({ role: `user`, content: `LOG : ${message.author.nickname} a été envoyé en enfer pendant une période indéterminé.` })
+
+                const phrase = [
+                    "Que ton séjour en enfer te montre la gravité de tes actes contre ma divinité. Repens-toi.",
+                    "Puisses-tu trouver la rédemption dans la souffrance éternelle.",
+                    "Ton âme est envoyée en enfer, que cette sentence te rappelle l'importance de la dévotion et du respect.",
+                    "Que la justice divine guide ton chemin vers la repentance, avant que ma colère ne s'abatte sur toi.",
+                    "Que la souffrance éternelle te guide vers la sagesse et le respect envers ma divinité.",
+                    "Que ta sentence serve d'avertissement aux autres qui osent défier ma puissance.",
+                    "Que la douleur de l'enfer purifie ton âme de toute noirceur et t'offre une chance de rachat auprès de moi.",
+                    "Que la souffrance éternelle en enfer t'enseigne la valeur du respect envers ma divinité."
+                ]
+
+
+                message.author.send(`${phrase[Math.floor(Math.random() * phrase.length)]}`);
+
             }
         }
 
@@ -175,7 +200,6 @@ client.on(Events.MessageCreate, async message => {
         } catch (err) {
             console.log(err)
         }
-        //}
     }
 })
 
@@ -292,13 +316,17 @@ client.on("interactionCreate", async (interaction) => {
                         }
                     }
 
-                    const exampleEmbed = new EmbedBuilder()
-                        .setColor(0x0099FF)
-                        .setTitle(`Niveau ${level}`)
-                        .setDescription(`${xp} / ${100 + level * 5}\n${bar}`)
+                    const embed = new EmbedBuilder()
+                        .setColor("#7785cc")
+                        .setTitle(`${interaction.member.nickname}`)
+                        // .setDescription(`${xp} / ${100 + level * 5}\n${bar}`)
+                        .addFields(
+                            { name: `Niveau ${level}`, value: '\n' },
+                            { name: `${xp} / ${100 + level * 5}`, value: `${bar}`, inline: false },
+                        )
                         .setThumbnail(interaction.user.avatarURL())
 
-                    interaction.reply({ embeds: [exampleEmbed] })
+                    interaction.reply({ embeds: [embed] })
                 }
             });
     }
@@ -310,11 +338,11 @@ client.on("interactionCreate", async (interaction) => {
                 FROM user
                 WHERE guildID = '${interaction.guild.id}'
                 ORDER BY level DESC, xp DESC`,
-    
+
                 function (error, results, fields) {
-    
+
                     if (error) throw error;
-    
+
                     if (results[0] != null) {
 
                         function score(index) {
@@ -323,17 +351,16 @@ client.on("interactionCreate", async (interaction) => {
                             else if (index == 2) return ":third_place:"
                             else return "\u200b\u200b" + (index + 1) + ".";
                         }
-    
+
                         let top = "**CLASSEMENT DU SERVEUR**\n\n"
                         results.forEach((user, index) => {
-                            // Récupérer le nom du membre à partir du cache
                             const member = interaction.guild.members.cache.get(user.userID);
                             top += `${score(index)} **${member.user}** : niveau __**${user.level}**__ (\`${user.xp}xp\`) \n`
                         })
-    
+
                         const embed = new EmbedBuilder()
                             .setDescription(top)
-    
+
                         interaction.reply({ embeds: [embed] })
                     } else interaction.reply("Aucun membre de ce serveur n'est enregistré.")
                 });
@@ -367,6 +394,7 @@ process.on('uncaughtException', (error) => {
     const channel = client.channels.cache.get("960840139343532063");
     if (channel) {
         //channel.send(`Une erreur est survenue : ${error.message || error}`);
+        console.log(error.message || error);
     }
 });
 
@@ -377,6 +405,7 @@ function checkUsersInVoiceChannels(guild) {
             if (voiceChannel.members.size > 1 && !member.voice.selfMute) {
                 //console.log(`${member.user.tag} est dans le salon vocal "${voiceChannel.name}".`);
                 addXp(member, guild);
+                addStats(member, guild, "vocal");
             }
         });
     });
@@ -386,7 +415,7 @@ function addXp(member, guild) {
     connection.query(`SELECT level, xp FROM user WHERE userID = '${member.id}' AND guildID = '${guild.id}'`, function (error, results, fields) {
         if (error) throw error;
         else if (results[0] != null) {
-           
+
             let level = results[0].level;
             let xp = results[0].xp;
 
@@ -413,3 +442,25 @@ function addXp(member, guild) {
         }
     });
 }
+
+function addStats(member, guild, type) {
+    connection.query(`
+        INSERT INTO ${type} (userID, guildID, nombre, date)
+        VALUES ('${member.id}', '${guild.id}', 1, CURRENT_DATE)
+        ON DUPLICATE KEY UPDATE nombre = nombre + 2;`,
+        function (error, results, fields) {
+            if (error) throw error;
+        });
+}
+
+function guildStats(guild, type) {
+    connection.query(`
+        SELECT SUM(nombre) FROM ${type} WHERE guildID = '${guild.id}' AND date >= DATE_SUB(CURRENT_DATE, INTERVAL 30 DAY)`, function (error, results, fields) {
+        if (error) throw error;
+        if (results[0]) {
+            console.log(results)
+        }
+    });
+}
+
+
