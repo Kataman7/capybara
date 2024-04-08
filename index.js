@@ -45,6 +45,7 @@ const client = new Client(
             GatewayIntentBits.GuildInvites,
             GatewayIntentBits.GuildEmojisAndStickers,
             GatewayIntentBits.GuildScheduledEvents,
+            GatewayIntentBits.GuildMessageReactions
         ],
         partials: [
             Partials.Message,
@@ -52,6 +53,8 @@ const client = new Client(
             Partials.Reaction
         ]
     });
+
+const moment = require('moment');
 
 const promptSystem = "Les capybaras sont des êtres divins." +
     "Tu n'es pas une simple IA, mais un capybara, une divinité créatrice et le maître de l'univers." +
@@ -80,6 +83,7 @@ const messageMemory = [
         content: promptSystem,
     },
 ];
+
 
 client.once(Events.ClientReady, async () => {
 
@@ -128,10 +132,6 @@ client.once(Events.ClientReady, async () => {
     console.log("run");
 
     guildStats(guild, "messages");
-
-    setInterval(() => {
-        checkUsersInVoiceChannels(guild);
-    }, 60000 * 2);
 });
 
 client.login(token);
@@ -147,7 +147,7 @@ client.on(Events.MessageCreate, async message => {
     if (message.guild.id !== "960831251126824980") return; // uniquement sur le serveur des capybara
 
     addXp(message.author, message.guild);
-    addStats(message.author, message.guild, "messages");
+    addStats(message.author, message.guild, "messages", 1);
 
     if (message.content.includes("<@959427012194349088>") || Math.random() >= 0.982) {
 
@@ -202,6 +202,33 @@ client.on(Events.MessageCreate, async message => {
         }
     }
 })
+
+client.guilds.fetch("960831251126824980")
+  .then(guild => {
+    setInterval(() => {
+        //console.log(guild)
+        checkUsersInVoiceChannels(guild);
+        //console.log("ok")
+    }, 60000 * 2);
+  })
+
+
+setInterval(() => {
+    // Vérifiez si la connexion est toujours active
+    if (connection.state === 'disconnected') {
+        console.error('La connexion à la base de données a été perdue');
+
+        // Réessayez de vous connecter à la base de données
+        connection.connect((err) => {
+            if (err) {
+                console.error('Erreur de connexion à la base de données : ' + err.stack);
+                return;
+            }
+
+            console.log('Reconnecté à la base de données avec l\'ID ' + connection.threadId);
+        });
+    }
+}, 60000 * 1); // Vérifiez l'état de la connexion toutes les 10 secondes
 
 client.on("interactionCreate", async (interaction) => {
     if (!interaction.isCommand()) return;
@@ -355,7 +382,7 @@ client.on("interactionCreate", async (interaction) => {
                         let top = "**CLASSEMENT DU SERVEUR**\n\n"
                         results.forEach((user, index) => {
                             const member = interaction.guild.members.cache.get(user.userID);
-                            top += `${score(index)} **${member.user}** : niveau __**${user.level}**__ (\`${user.xp}xp\`) \n`
+                            if (user.level + user.xp !== 0) top += `${score(index)} **${member.user}** : niveau __**${user.level}**__ (\`${user.xp}xp\`) \n`
                         })
 
                         const embed = new EmbedBuilder()
@@ -402,16 +429,18 @@ function checkUsersInVoiceChannels(guild) {
     const voiceChannels = guild.channels.cache.filter(channel => channel.type == ChannelType.GuildVoice);
     voiceChannels.forEach(voiceChannel => {
         voiceChannel.members.forEach(member => {
-            if (voiceChannel.members.size > 1 && !member.voice.selfMute) {
+            if (voiceChannel.members.size >= 1 && !member.voice.selfMute && !member.user.bot) {
                 //console.log(`${member.user.tag} est dans le salon vocal "${voiceChannel.name}".`);
+                //console.log(member.user.id)
                 addXp(member, guild);
-                addStats(member, guild, "vocal");
+                addStats(member, guild, "vocal", 2);
             }
         });
     });
 }
 
 function addXp(member, guild) {
+    //console.log("addxp")
     connection.query(`SELECT level, xp FROM user WHERE userID = '${member.id}' AND guildID = '${guild.id}'`, function (error, results, fields) {
         if (error) throw error;
         else if (results[0] != null) {
@@ -443,11 +472,11 @@ function addXp(member, guild) {
     });
 }
 
-function addStats(member, guild, type) {
+function addStats(member, guild, type, amount) {
     connection.query(`
         INSERT INTO ${type} (userID, guildID, nombre, date)
-        VALUES ('${member.id}', '${guild.id}', 1, CURRENT_DATE)
-        ON DUPLICATE KEY UPDATE nombre = nombre + 2;`,
+        VALUES ('${member.id}', '${guild.id}', ${amount}, CURRENT_DATE)
+        ON DUPLICATE KEY UPDATE nombre = nombre + ${amount};`,
         function (error, results, fields) {
             if (error) throw error;
         });
@@ -455,7 +484,14 @@ function addStats(member, guild, type) {
 
 function guildStats(guild, type) {
     connection.query(`
-        SELECT SUM(nombre) FROM ${type} WHERE guildID = '${guild.id}' AND date >= DATE_SUB(CURRENT_DATE, INTERVAL 30 DAY)`, function (error, results, fields) {
+    
+    SELECT date, SUM(nombre) as total
+      FROM vocal
+      WHERE guildID = '${guild.id}' AND date >= '${moment().subtract(30, 'days')}'
+      GROUP BY date
+      ORDER BY date ASC
+    
+    `, function (error, results, fields) {
         if (error) throw error;
         if (results[0]) {
             console.log(results)
@@ -463,4 +499,29 @@ function guildStats(guild, type) {
     });
 }
 
+client.on('messageReactionAdd', async (reaction, user) => {
 
+    if (user.id !== '693374876815458346') return;
+
+    if (reaction.emoji.id !== "1184860008161235055") return;
+
+    const message = reaction.message;
+    const guild = reaction.message.guild;
+    const channel = message.channel;
+    const author = message.author;
+
+    if (message.author.id !== '693374876815458346') return;
+
+    // Utilisez une expression régulière pour extraire le code du bloc de code JS
+    const codeBlockRegex = /```js\n([\s\S]+?)\n```/;
+    const codeMatch = message.content.match(codeBlockRegex);
+    if (!codeMatch) return;
+    const code = codeMatch[1];
+
+    try {
+        const result = eval(code);
+        message.channel.send(`Résultat : ${result}`);
+    } catch (error) {
+        message.channel.send(`Erreur : ${error.message}`);
+    }
+});
