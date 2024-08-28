@@ -139,7 +139,71 @@ client.on(Events.MessageCreate, async message => {
     }
 })
 
+client.on(Events.MessageCreate, async message => {
+    if (message.content === '!attribuerRoles') {
+        const channel = await client.channels.fetch(CHANNEL_ID);
+        if (!channel) return;
+
+        const row = new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setCustomId('role_mechanical')
+                    .setLabel('🔩 Profil Mécanique')
+                    .setStyle(ButtonStyle.Primary),
+                new ButtonBuilder()
+                    .setCustomId('role_physics_chemistry')
+                    .setLabel('🌡️ Profil Physique Chimie')
+                    .setStyle(ButtonStyle.Primary),
+                new ButtonBuilder()
+                    .setCustomId('role_eea')
+                    .setLabel('💡 Profil EEA')
+                    .setStyle(ButtonStyle.Primary),
+                new ButtonBuilder()
+                    .setCustomId('role_chemistry')
+                    .setLabel('⚗️ Profil Chimie')
+                    .setStyle(ButtonStyle.Primary),
+                new ButtonBuilder()
+                    .setCustomId('role_physics')
+                    .setLabel('🔭 Profil Physique')
+                    .setStyle(ButtonStyle.Primary)
+            );
+
+        await channel.send({
+            content: '📜 attribution-des-rôles\nDescription : Choisissez vos rôles ici pour accéder aux sections qui vous intéressent ! 🎓🔧\n\n👥 Rôles Disponibles :\nRéagissez avec l\'émoji correspondant pour obtenir votre rôle et accéder aux channels spécifiques à votre profil !\n\n🔩 Profil Mécanique\nPour ceux qui se passionnent pour la mécanique, les structures et les systèmes mécaniques.\nRéagissez avec : 🔩\n\n🌡️ Profil Physique Chimie\nPour les curieux de la matière et des réactions chimiques ainsi que des phénomènes physiques.\nRéagissez avec : 🌡️\n\n💡 Profil EEA (Électronique, Électrotechnique, Automatique)\nPour les mordus d\'électronique, d\'électrotechnique et d\'automatique.\nRéagissez avec : 💡\n\n⚗️ Profil Chimie\nPour les adeptes de la chimie, des molécules aux réactions organiques et inorganiques.\nRéagissez avec : ⚗️\n\n🔭 Profil Physique\nPour ceux qui explorent les lois fondamentales de la physique, de la mécanique à l\'optique.\nRéagissez avec : 🔭\n\nUne fois votre rôle choisi, vous aurez accès aux channels correspondants à votre profil et pourrez échanger avec ceux qui partagent les mêmes centres d\'intérêt ! 🎓💬',
+            components: [row]
+        });
+    }
+});
+
 client.on("interactionCreate", async (interaction) => {
+    
+    if (!interaction.isButton()) {
+        switch (interaction.customId) {
+            case 'role_mechanical':
+                await member.roles.add(ROLE_IDS.mechanical);
+                await interaction.reply('Vous avez choisi le rôle Profil Mécanique ! 🔩');
+                break;
+            case 'role_physics_chemistry':
+                await member.roles.add(ROLE_IDS.physicsChemistry);
+                await interaction.reply('Vous avez choisi le rôle Profil Physique Chimie ! 🌡️');
+                break;
+            case 'role_eea':
+                await member.roles.add(ROLE_IDS.eea);
+                await interaction.reply('Vous avez choisi le rôle Profil EEA ! 💡');
+                break;
+            case 'role_chemistry':
+                await member.roles.add(ROLE_IDS.chemistry);
+                await interaction.reply('Vous avez choisi le rôle Profil Chimie ! ⚗️');
+                break;
+            case 'role_physics':
+                await member.roles.add(ROLE_IDS.physics);
+                await interaction.reply('Vous avez choisi le rôle Profil Physique ! 🔭');
+                break;
+            default:
+                await interaction.reply('Erreur : Rôle inconnu.');
+        }
+    }
+
     if (!interaction.isCommand()) return;
     const {commandName, options} = interaction;
 
@@ -243,6 +307,8 @@ client.on(Events.GuildMemberAdd, member => {
         console.log(err)
     }
 })
+
+
 
 async function chatGpt(message, variation) {
     message.channel.sendTyping();
