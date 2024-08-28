@@ -151,7 +151,7 @@ client.on(Events.MessageCreate, async message => {
             );
 
         await channel.send({
-            content: '# Choisissez vos rôles ici pour accéder aux sections qui vous intéressent !\nUne fois votre rôle choisi, vous aurez accès aux channels correspondants à votre profil et pourrez échanger avec ceux qui partagent les mêmes centres d\'intérêt ! 🎓💬\n',
+            content: '# Choisissez vos rôles ici pour accéder aux sections qui vous intéressent !\nUne fois votre rôle choisi, vous aurez accès aux channels correspondants à votre profil et pourrez échanger avec ceux qui partagent les mêmes centres d\'intérêt ! 🎓💬\n\n',
             components: [row]
         });
     }
@@ -174,34 +174,61 @@ client.on(Events.MessageCreate, async message => {
     }
 })
 
+async function autoRole(member, roleID) {
+    try {
+        if (member.roles.cache.has(roleID)) {
+            await member.roles.remove(roleID);
+        } else {
+            await member.roles.add(roleID);
+        }
+    } catch (error) {
+        console.error('Erreur lors de la gestion des rôles :', error);
+    }
+}
+
+
 client.on("interactionCreate", async (interaction) => {
     
     if (interaction.isButton()) {
         member = interaction.member;
+
+        const roleIds = {
+            role_mechanical: "1278363984583720985",
+            role_physics_chemistry: "1278364129056522260",
+            role_eea: "1278364195108425760",
+            role_chemistry: "1278364240499052554",
+            role_physics: "1278364296174243870"
+        };
+
         switch (interaction.customId) {
             case 'role_mechanical':
-                await member.roles.add("1278363984583720985");
-                await interaction.reply('Vous avez choisi le rôle Profil Mécanique ! 🔩');
+                await autoRole(member, "1278363984583720985")
+                await interaction.reply({ content: 'Vous avez choisi le rôle Profil Mécanique ! 🔩', ephemeral: true });
                 break;
             case 'role_physics_chemistry':
-                await member.roles.add("1278364129056522260");
-                await interaction.reply('Vous avez choisi le rôle Profil Physique Chimie ! 🌡️');
+                await autoRole(member, "1278364129056522260")
+                await interaction.reply({ content: 'Vous avez choisi le rôle Profil Physique Chimie ! 🌡️', ephemeral: true });
                 break;
             case 'role_eea':
-                await member.roles.add("1278364195108425760");
-                await interaction.reply('Vous avez choisi le rôle Profil EEA ! 💡');
+                await autoRole(member, "1278364195108425760")
+                await interaction.reply({ content: 'Vous avez choisi le rôle Profil EEA ! 💡', ephemeral: true });
                 break;
             case 'role_chemistry':
-                await member.roles.add("1278364240499052554");
-                await interaction.reply('Vous avez choisi le rôle Profil Chimie ! ⚗️');
+                await autoRole(member, "1278364240499052554")
+                await interaction.reply({ content: 'Vous avez choisi le rôle Profil Chimie ! ⚗️', ephemeral: true });
                 break;
             case 'role_physics':
-                await member.roles.add("1278364296174243870");
-                await interaction.reply('Vous avez choisi le rôle Profil Physique ! 🔭');
+                await autoRole(member, "1278364296174243870")
+                await interaction.reply({ content: 'Vous avez choisi le rôle Profil Physique ! 🔭', ephemeral: true });
                 break;
             default:
-                await interaction.reply('Erreur : Rôle inconnu.');
+                await interaction.reply({ content: 'Erreur : Rôle inconnu.', ephemeral: true });
         }
+
+        if (member.roles.cache.has("1156971890531905536")) {
+            await member.roles.remove("1156971890531905536");
+        }
+        await member.roles.remove("1278357292357652590");
     }
 
     if (!interaction.isCommand()) return;
