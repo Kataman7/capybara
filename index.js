@@ -121,27 +121,8 @@ client.on(Events.MessageCreate, async message => {
 
     if (!message.guild) return;
 
-    if (message.guild.id !== "960831251126824980") return; // uniquement sur le serveur des capybara
-
-    if (message.content.includes("<@959427012194349088>")) {
-        chatGpt(message, `${message.member.nickname} s'adresse à toi :`);
-    }
-    else if (Math.random() >= 0.982) {
-        chatGpt(message, ` tu interceptes un message de ${message.member.nickname}, mais il ne s'adressai pas à toi, il est donc sorti de son contexte`);
-    }
-    else if (message.reference) {
-        try {
-            const referencedMessage = await message.fetchReference();
-            if (referencedMessage.author.id === client.user.id) chatGpt(message, `${message.member.nickname} répond à ton message "${referencedMessage.content}" : `)
-        } catch (error) {
-            console.error('Failed to fetch the referenced message:', error);
-        }
-    }
-})
-
-client.on(Events.MessageCreate, async message => {
     if (message.content === '!attribuerRoles') {
-        const channel = await client.channels.fetch(CHANNEL_ID);
+        const channel = await client.channels.fetch("1278362552623038515");
         if (!channel) return;
 
         const row = new ActionRowBuilder()
@@ -173,7 +154,24 @@ client.on(Events.MessageCreate, async message => {
             components: [row]
         });
     }
-});
+
+    if (message.guild.id !== "960831251126824980") return; // uniquement sur le serveur des capybara
+
+    if (message.content.includes("<@959427012194349088>")) {
+        chatGpt(message, `${message.member.nickname} s'adresse à toi :`);
+    }
+    else if (Math.random() >= 0.982) {
+        chatGpt(message, ` tu interceptes un message de ${message.member.nickname}, mais il ne s'adressai pas à toi, il est donc sorti de son contexte`);
+    }
+    else if (message.reference) {
+        try {
+            const referencedMessage = await message.fetchReference();
+            if (referencedMessage.author.id === client.user.id) chatGpt(message, `${message.member.nickname} répond à ton message "${referencedMessage.content}" : `)
+        } catch (error) {
+            console.error('Failed to fetch the referenced message:', error);
+        }
+    }
+})
 
 client.on("interactionCreate", async (interaction) => {
     
