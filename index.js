@@ -176,7 +176,7 @@ client.on(Events.MessageCreate, async message => {
 
 client.on("interactionCreate", async (interaction) => {
     
-    if (!interaction.isButton()) {
+    if (interaction.isButton()) {
         switch (interaction.customId) {
             case 'role_mechanical':
                 await member.roles.add(ROLE_IDS.mechanical);
