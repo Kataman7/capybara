@@ -151,7 +151,7 @@ client.on(Events.MessageCreate, async message => {
             );
 
         await channel.send({
-            content: '📜 attribution-des-rôles\nDescription : Choisissez vos rôles ici pour accéder aux sections qui vous intéressent ! 🎓🔧\n\n👥 Rôles Disponibles :\nRéagissez avec l\'émoji correspondant pour obtenir votre rôle et accéder aux channels spécifiques à votre profil !\n\n🔩 Profil Mécanique\nPour ceux qui se passionnent pour la mécanique, les structures et les systèmes mécaniques.\nRéagissez avec : 🔩\n\n🌡️ Profil Physique Chimie\nPour les curieux de la matière et des réactions chimiques ainsi que des phénomènes physiques.\nRéagissez avec : 🌡️\n\n💡 Profil EEA (Électronique, Électrotechnique, Automatique)\nPour les mordus d\'électronique, d\'électrotechnique et d\'automatique.\nRéagissez avec : 💡\n\n⚗️ Profil Chimie\nPour les adeptes de la chimie, des molécules aux réactions organiques et inorganiques.\nRéagissez avec : ⚗️\n\n🔭 Profil Physique\nPour ceux qui explorent les lois fondamentales de la physique, de la mécanique à l\'optique.\nRéagissez avec : 🔭\n\nUne fois votre rôle choisi, vous aurez accès aux channels correspondants à votre profil et pourrez échanger avec ceux qui partagent les mêmes centres d\'intérêt ! 🎓💬',
+            content: '# Choisissez vos rôles ici pour accéder aux sections qui vous intéressent !\nUne fois votre rôle choisi, vous aurez accès aux channels correspondants à votre profil et pourrez échanger avec ceux qui partagent les mêmes centres d\'intérêt ! 🎓💬\n',
             components: [row]
         });
     }
@@ -177,25 +177,26 @@ client.on(Events.MessageCreate, async message => {
 client.on("interactionCreate", async (interaction) => {
     
     if (interaction.isButton()) {
+        member = interaction.member;
         switch (interaction.customId) {
             case 'role_mechanical':
-                await member.roles.add(ROLE_IDS.mechanical);
+                await member.roles.add("1278363984583720985");
                 await interaction.reply('Vous avez choisi le rôle Profil Mécanique ! 🔩');
                 break;
             case 'role_physics_chemistry':
-                await member.roles.add(ROLE_IDS.physicsChemistry);
+                await member.roles.add("1278364129056522260");
                 await interaction.reply('Vous avez choisi le rôle Profil Physique Chimie ! 🌡️');
                 break;
             case 'role_eea':
-                await member.roles.add(ROLE_IDS.eea);
+                await member.roles.add("1278364195108425760");
                 await interaction.reply('Vous avez choisi le rôle Profil EEA ! 💡');
                 break;
             case 'role_chemistry':
-                await member.roles.add(ROLE_IDS.chemistry);
+                await member.roles.add("1278364240499052554");
                 await interaction.reply('Vous avez choisi le rôle Profil Chimie ! ⚗️');
                 break;
             case 'role_physics':
-                await member.roles.add(ROLE_IDS.physics);
+                await member.roles.add("1278364296174243870");
                 await interaction.reply('Vous avez choisi le rôle Profil Physique ! 🔭');
                 break;
             default:
