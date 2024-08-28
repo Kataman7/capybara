@@ -228,7 +228,7 @@ client.on("interactionCreate", async (interaction) => {
         if (member.roles.cache.has("1156971890531905536")) {
             await member.roles.remove("1156971890531905536");
         }
-        await member.roles.remove("1278357292357652590");
+        await member.roles.add("1278357292357652590");
     }
 
     if (!interaction.isCommand()) return;
