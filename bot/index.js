@@ -137,7 +137,7 @@ client.on('interactionCreate', async (interaction) => {
             const user = options.getUser('user') || interaction.user;
             try {
                 const u = await db.getFaith(interaction.guild.id, user.id) || { faith_level: 0, label: db.LEVELS['0'] };
-                await interaction.reply({ content: `La foi de ${user.username} : ${u.faith_level} (${u.label || 'Neutre'})` });
+                await interaction.reply({ content: `${user.username} est un **${u.label}** ( palier \`${u.faith_level}\` )` });
             } catch (err) {
                 console.error('Error while handling /faith command:', err);
                 await interaction.reply({ content: 'Impossible de récupérer la foi (erreur serveur).', ephemeral: true });
@@ -193,20 +193,33 @@ async function chatGpt(message, variation) {
     async function main() {
         const control = {
             role: 'system',
-            content: 'Return ONLY a JSON object with keys: message (string), faith_change (int, optional), update (boolean, optional), punish (boolean, optional). If you cannot, return plain JSON with keys message and update=false.'
+            content: 'Return ONLY a JSON object with keys: message (string), faith_change (int, optional), update (boolean, optional), punish (boolean, optional). The "punish" flag should ONLY be set to true in the most extreme cases where the person\'s soul is beyond redemption - severe blasphemy, repeated offenses against your divinity, or unforgivable acts. Use this sparingly and only when absolutely necessary. If you cannot, return plain JSON with keys message and update=false.'
         };
 
         const completion = await ai.sendChat([control, ...messageMemory], process.env.AI_MODEL || 'gpt-3.5-turbo');
 
         const raw = completion.choices[0].message.content;
         let parsed = null;
+        
+        // Nettoie le texte brut si le modèle a mis le JSON dans un bloc de code markdown
+        let cleanedRaw = raw.trim();
+        if (cleanedRaw.startsWith('```')) {
+            // Supprime les balises de code markdown (```json ou ``` au début/fin)
+            cleanedRaw = cleanedRaw.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
+        }
+        
         try {
-            parsed = JSON.parse(raw);
+            parsed = JSON.parse(cleanedRaw);
         } catch (err) {
-            parsed = { message: raw, faith_change: 0, update: false };
+            // Si le parsing échoue, utilise le texte brut comme message
+            parsed = { message: cleanedRaw, faith_change: 0, update: false };
         }
 
-        await message.reply(parsed.message || raw);
+        // Envoie uniquement le message (jamais le JSON complet)
+        const replyText = parsed.message || 'Erreur : aucun message reçu du divin Capybara.';
+        await message.reply(replyText);
+        
+        // Stocke le JSON brut dans la mémoire (pour que le modèle se souvienne de ses décisions)
         messageMemory.push({ role: `assistant`, content: `${raw}` });
 
         if (parsed.update && parsed.faith_change && parsed.faith_change !== 0) {
@@ -235,7 +248,11 @@ async function chatGpt(message, variation) {
                 const phrases = settings.punishMessages;
                 if (phrases.length > 0) {
                     const phrase = phrases[Math.floor(Math.random() * phrases.length)];
-                    message.author.send(`${phrase}`);
+                    try {
+                        await message.author.send(`${phrase}`);
+                    } catch (dmErr) {
+                        console.warn(`Impossible d'envoyer un DM à ${message.author.tag}: ${dmErr.message}`);
+                    }
                 }
 
                 messageMemory.push({
