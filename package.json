@@ -2,7 +2,15 @@
   "dependencies": {
     "discord.js": "^14.14.1",
     "moment": "^2.30.1",
-    "mysql": "^2.18.1",
-    "openai": "^4.20.1"
+    "mysql2": "^3.4.0",
+    "openai": "^4.20.1",
+    "dotenv": "^16.0.3"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "scripts": {
+    "start": "node bot/index.js",
+    "dev": "nodemon --legacy-watch bot/index.js"
   }
 }

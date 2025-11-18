@@ -1,0 +1,39 @@
+services:
+  capybara:
+    build: .
+    container_name: capybara_bot
+    env_file:
+      - .env
+    volumes:
+      - ./:/usr/src/app
+      - /usr/src/app/node_modules
+    # Ensure dependencies are installed in the container (useful when node_modules
+    # are not present or when package-lock was not updated) and then run dev.
+    command: sh -lc "npm ci --legacy-peer-deps || npm install --legacy-peer-deps; npm run dev"
+    restart: unless-stopped
+    tty: true
+
+  db:
+    image: mysql:8.0
+    container_name: capybara_db
+    env_file:
+      - .env
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASS}
+      MYSQL_DATABASE: ${DB_NAME}
+    volumes:
+      - db-data:/var/lib/mysql
+      - ./db/migrations:/docker-entrypoint-initdb.d
+    ports:
+      - '3306:3306'
+    restart: unless-stopped
+
+  adminer:
+    image: adminer
+    restart: always
+    ports:
+      - 8080:8080
+    depends_on:
+      - db
+volumes:
+  db-data:
