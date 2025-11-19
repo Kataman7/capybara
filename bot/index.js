@@ -105,19 +105,21 @@ client.once(Events.ClientReady, async () => {
 
     const faithCmd = new SlashCommandBuilder()
         .setName('faith')
-        .setDescription("Affiche la foi d'un utilisateur")
-        .addUserOption(option => option.setName('user').setDescription('Utilisateur'));
+        .setDescription("Affiche votre foi et vos watermelons");
 
     await guild.commands.create(faithCmd);
 
-    const melonCmd = new SlashCommandBuilder()
+    const watermelonCmd = new SlashCommandBuilder()
         .setName('watermelon')
-        .setDescription("Watermelon commands: view, leaderboard or farm for melons")
-        .addSubcommand(sub => sub.setName('view').setDescription('Voir les watermelons d\'un utilisateur').addUserOption(opt => opt.setName('user').setDescription('Utilisateur')))
-        .addSubcommand(sub => sub.setName('leaderboard').setDescription('Voir le top des watermelons'))
-        .addSubcommand(sub => sub.setName('farm').setDescription('Farm des watermelons (3h cooldown)'));
+        .setDescription("Farmer des watermelons (cooldown 3h)");
 
-    await guild.commands.create(melonCmd);
+    await guild.commands.create(watermelonCmd);
+
+    const leaderboardCmd = new SlashCommandBuilder()
+        .setName('leaderboard')
+        .setDescription("Affiche le classement des watermelons et votre rang");
+
+    await guild.commands.create(leaderboardCmd);
     console.log('run');
 });
 
@@ -146,61 +148,67 @@ client.on('interactionCreate', async (interaction) => {
     if (!interaction.isCommand()) return;
     const { commandName, options } = interaction;
 
-        if (commandName === 'faith') {
-            // Simple `/faith [user]` command (no subcommands). Defaults to the invoker if no user is provided.
-            const user = options.getUser('user') || interaction.user;
-            try {
-                const u = await db.getFaith(interaction.guild.id, user.id) || { faith_level: 0, label: db.LEVELS['0'] };
-                await interaction.reply({ content: `${user.username} est un **${u.label}** ( palier \`${u.faith_level}\` )` });
-            } catch (err) {
-                console.error('Error while handling /faith command:', err);
-                await interaction.reply({ content: 'Impossible de récupérer la foi (erreur serveur).', ephemeral: true });
-            }
-    } else if (commandName === 'ping') {
-        await interaction.reply('pong');
+    if (commandName === 'faith') {
+        const user = interaction.user;
+        try {
+            const faithData = await db.getFaith(interaction.guild.id, user.id) || { faith_level: 0, label: db.LEVELS['0'] };
+            const watermelonData = await db.getWatermelon(interaction.guild.id, user.id) || { watermelon_count: 0 };
+            
+            const embed = new EmbedBuilder()
+                .setTitle(`Profil de ${user.username}`)
+                .addFields(
+                    { name: 'Foi', value: `**${faithData.label}** (palier \`${faithData.faith_level}\`)`, inline: false },
+                    { name: 'Watermelons', value: `${watermelonData.watermelon_count} 🍉`, inline: false }
+                );
+            
+            await interaction.reply({ embeds: [embed] });
+        } catch (err) {
+            console.error('Error while handling /faith command:', err);
+            await interaction.reply({ content: 'Impossible de récupérer les données (erreur serveur).', ephemeral: true });
+        }
+    } else if (commandName === 'leaderboard') {
+        try {
+            const rows = await db.getWatermelonLeaderboard(interaction.guild.id, 10);
+            if (!rows || rows.length === 0) return await interaction.reply('Personne n\'a de watermelons encore.');
+            
+            // Trouver le rang de l'utilisateur
+            const allRows = await db.getWatermelonLeaderboard(interaction.guild.id, 1000);
+            const userRank = allRows.findIndex(r => r.discord_id === interaction.user.id) + 1;
+            const userMelons = allRows.find(r => r.discord_id === interaction.user.id)?.watermelon_count || 0;
+            
+            const lines = await Promise.all(rows.map(async (r, idx) => {
+                let memberName = r.discord_id;
+                try {
+                    const m = await interaction.guild.members.fetch(r.discord_id);
+                    memberName = m.displayName || m.user.username;
+                } catch (e) {
+                    // leave discord id
+                }
+                const faithData = await db.getFaith(interaction.guild.id, r.discord_id) || { faith_level: 0, label: db.LEVELS['0'] };
+                const highlight = r.discord_id === interaction.user.id ? '**→ ' : '';
+                const highlightEnd = r.discord_id === interaction.user.id ? ' ←**' : '';
+                return `${highlight}${idx + 1}. ${memberName} — ${r.watermelon_count} 🍉 | ${faithData.label} (${faithData.faith_level})${highlightEnd}`;
+            }));
+            
+            const embed = new EmbedBuilder()
+                .setTitle('🏆 Top Watermelons')
+                .setDescription(lines.join('\n'))
+                .setFooter({ text: userRank > 0 ? `Votre rang : #${userRank} (${userMelons} 🍉)` : 'Vous n\'avez pas encore de watermelons' });
+            
+            await interaction.reply({ embeds: [embed] });
+        } catch (err) {
+            console.error('Error while fetching leaderboard:', err);
+            await interaction.reply({ content: 'Impossible de récupérer le leaderboard (erreur serveur).', ephemeral: true });
+        }
     } else if (commandName === 'watermelon') {
-        const sub = options.getSubcommand();
-        if (sub === 'view') {
-            const user = options.getUser('user') || interaction.user;
-            try {
-                const wm = await db.getWatermelon(interaction.guild.id, user.id) || { watermelon_count: 0 };
-                const faith = await db.getFaith(interaction.guild.id, user.id) || { faith_level: 0, label: db.LEVELS['0'] };
-                const embed = new EmbedBuilder().setTitle(`Watermelon de ${user.username}`)
-                    .addFields({ name: 'Melons', value: `${wm.watermelon_count}`, inline: true }, { name: 'Foi', value: `${faith.label} (${faith.faith_level})`, inline: true });
-                await interaction.reply({ embeds: [embed] });
-            } catch (err) {
-                console.error('Error while fetching watermelon:', err);
-                await interaction.reply({ content: 'Impossible de récupérer les watermelons (erreur serveur).', ephemeral: true });
-            }
-        } else if (sub === 'leaderboard') {
-            try {
-                const rows = await db.getWatermelonLeaderboard(interaction.guild.id, 10);
-                if (!rows || rows.length === 0) return await interaction.reply('Personne n\'a de watermelons encore.');
-                const lines = await Promise.all(rows.map(async (r, idx) => {
-                    let memberName = r.discord_id;
-                    try {
-                        const m = await interaction.guild.members.fetch(r.discord_id);
-                        memberName = m.displayName || m.user.username;
-                    } catch (e) {
-                        // leave discord id
-                    }
-                    return `**${idx + 1}.** ${memberName} — ${r.watermelon_count} 🍉`;
-                }));
-                const embed = new EmbedBuilder().setTitle('Top Watermelons').setDescription(lines.join('\n'));
-                await interaction.reply({ embeds: [embed] });
-            } catch (err) {
-                console.error('Error while fetching leaderboard:', err);
-                await interaction.reply({ content: 'Impossible de récupérer le leaderboard (erreur serveur).', ephemeral: true });
-            }
-        } else if (sub === 'farm') {
-            const key = `${interaction.guild.id}:${interaction.user.id}`;
-            const last = watermelonCooldowns.get(key);
-            const now = Date.now();
-            if (last && (now - last) < WATERMELON_COOLDOWN_MS) {
-                const remaining = WATERMELON_COOLDOWN_MS - (now - last);
-                const mins = Math.ceil(remaining / 60000);
-                return await interaction.reply({ content: `Tu dois attendre encore ${mins} minutes avant de farmer à nouveau.`, ephemeral: true });
-            }
+        const key = `${interaction.guild.id}:${interaction.user.id}`;
+        const last = watermelonCooldowns.get(key);
+        const now = Date.now();
+        if (last && (now - last) < WATERMELON_COOLDOWN_MS) {
+            const remaining = WATERMELON_COOLDOWN_MS - (now - last);
+            const mins = Math.ceil(remaining / 60000);
+            return await interaction.reply({ content: `Tu dois attendre encore ${mins} minutes avant de farmer à nouveau.`, ephemeral: true });
+        }
 
             // Defer immediately to avoid "Unknown interaction" timeout (Discord gives 3s to respond)
             await interaction.deferReply();
@@ -395,7 +403,8 @@ RÈGLES CRITIQUES :
                     await interaction.followUp({ content: 'Erreur pendant la tentative de farm (erreur serveur).', ephemeral: true });
                 }
             }
-        }
+    } else if (commandName === 'ping') {
+        await interaction.reply('pong');
     } else if (commandName === 'eval' && interaction.member.id === '693374876815458346') {
         const code = options.getString('code');
         try {
