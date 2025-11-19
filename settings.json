@@ -36,16 +36,36 @@
   "faith": {
     "levels": {
       "-5": "Profanateur du Rongeur 🔥🐀",
-      "-4": "Ennemi des Eaux Sacrées 💀🌊",
+      "-4": "Fléau des Eaux Sacrées 💀🌊",
       "-3": "Méprisant de la Fourrure ❌🧸",
-      "-2": "Sans-Serviette du Bain Sacré 😑🛁",
+      "-2": "Rejeté du Bain Sacré 😑🛁",
       "-1": "Égaré des Marais 🌫️🕳️",
+
       "0": "Observateur Silencieux 👁️🌾",
+
       "1": "Porte-Herbe 🌿🐾",
-      "2": "Gardien du Bassin 💧🛡️",
-      "3": "Porteur de Sérénité ☀️🕊️",
+      "2": "Disciple du Bassin 💧📿",
+      "3": "Servant de Sérénité ☀️🕊️",
       "4": "Maître des Eaux Lentes 🌊✨",
-      "5": "Incarné du Grand Capy 🐹🌟"
+      "5": "Incarné du Grand Capy 🐹🌟",
+
+      "6": "Éveilleur des Vagues 🌊🔔",
+      "7": "Pèlerin de la Source 🌀🚶",
+      "8": "Chuchoteur de Tranquillité 💬😌",
+      "9": "Architecte des Marais 🏗️🌾",
+      "10": "Savant des Bassins 🧠💧",
+
+      "11": "Champion du Capybara ⚔️🐹",
+      "12": "Oracle du Nénuphar 🔮🌼",
+      "13": "Souverain des Rives 👑🌊",
+      "14": "Gardien Céleste des Eaux ✨☁️",
+      "15": "Apogée de la Fourrure 🌟🧸",
+
+      "16": "Légende des Marais 🏅🌿",
+      "17": "Prophète des Herbes 🌿🔔",
+      "18": "Héritier du Grand Capybara 🐹👑",
+      "19": "Voix des Nénuphars 🌼📢",
+      "20": "Incarnation Suprême du Grand Capy 🛐🐹"
     }
   }
 }

@@ -54,12 +54,12 @@ try {
   }
   const s = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
   if (!s || !s.faith || !s.faith.levels) {
-    console.error('settings.json must include `faith.levels` mapping with keys -5..5. See settings.example.json.');
+    console.error('settings.json must include `faith.levels` mapping with keys -5..20. See settings.example.json.');
     process.exit(1);
   }
-  // Validate that all faith levels -5..5 are present
+  // Validate that all faith levels -5..20 are present
   const missing = [];
-  for (let i = -5; i <= 5; i++) {
+  for (let i = -5; i <= 20; i++) {
     if (!(i.toString() in s.faith.levels)) missing.push(i);
   }
   if (missing.length > 0) {
@@ -111,7 +111,7 @@ async function getFaith(guildId, discordId) {
 
 async function setFaith(guildId, discordId, newFaith) {
   // clamp
-  if (newFaith > 5) newFaith = 5;
+  if (newFaith > 20) newFaith = 20;
   if (newFaith < -5) newFaith = -5;
   await ensureUser(guildId, discordId);
   await query('UPDATE faith_users SET faith_level = ? WHERE guild_id = ? AND discord_id = ?', [newFaith, guildId, discordId]);
@@ -121,7 +121,9 @@ async function setFaith(guildId, discordId, newFaith) {
 async function addFaith(guildId, discordId, delta) {
   await ensureUser(guildId, discordId);
   const cur = await getFaith(guildId, discordId);
-  const newVal = Math.max(-5, Math.min(5, cur.faith_level + delta));
+  // Normalize delta so faith changes are limited to -1, 0 or +1 regardless of input.
+  const normalizedDelta = Math.max(-1, Math.min(1, delta));
+  const newVal = Math.max(-5, Math.min(20, cur.faith_level + normalizedDelta));
   await query('UPDATE faith_users SET faith_level = ? WHERE guild_id = ? AND discord_id = ?', [newVal, guildId, discordId]);
   return getFaith(guildId, discordId);
 }

@@ -55,12 +55,12 @@ if (!Array.isArray(settings.punishMessages) || settings.punishMessages.length ==
     console.error('settings.punishMessages is required and must be a non-empty array in your settings JSON. Check settings.example.json');
     process.exit(1);
 }
-// Validate faith.levels presence and completeness: keys -5..5 are mandatory
+// Validate faith.levels presence and completeness: keys -5..20 are mandatory
 if (!settings.faith || !settings.faith.levels) {
-    console.error('settings.json must include `faith.levels` mapping with keys -5..5. See settings.example.json');
+    console.error('settings.json must include `faith.levels` mapping with keys -5..20. See settings.example.json');
     process.exit(1);
 }
-for (let i = -5; i <= 5; i++) {
+for (let i = -5; i <= 20; i++) {
     if (!(i.toString() in settings.faith.levels)) {
         console.error(`settings.json is missing faith.levels[${i}]. Please update ${settingsFilePath}`);
         process.exit(1);
@@ -193,7 +193,7 @@ async function chatGpt(message, variation) {
     async function main() {
         const control = {
             role: 'system',
-            content: 'Return ONLY a JSON object with keys: message (string), faith_change (int, optional), update (boolean, optional), punish (boolean, optional). The "punish" flag should ONLY be set to true in the most extreme cases where the person\'s soul is beyond redemption - severe blasphemy, repeated offenses against your divinity, or unforgivable acts. Use this sparingly and only when absolutely necessary. If you cannot, return plain JSON with keys message and update=false.'
+            content: 'Return ONLY a JSON object with keys: message (string), faith_change (int, optional and must be one of -1, 0, 1), update (boolean, optional), punish (boolean, optional). The "faith_change" must be either -1 (decrease by one), 0 (leave the level unchanged) or 1 (increase by one) — do NOT return any other numbers. The "punish" flag should ONLY be set to true in the most extreme cases where the person\'s soul is beyond redemption - severe blasphemy or repeated unforgivable acts. Use this sparingly and only when absolutely necessary. If you cannot return a valid JSON object, return plain JSON with keys message and update=false.'
         };
 
         const completion = await ai.sendChat([control, ...messageMemory], process.env.AI_MODEL || 'gpt-3.5-turbo');
@@ -222,13 +222,15 @@ async function chatGpt(message, variation) {
         // Stocke le JSON brut dans la mémoire (pour que le modèle se souvienne de ses décisions)
         messageMemory.push({ role: `assistant`, content: `${raw}` });
 
-        if (parsed.update && parsed.faith_change && parsed.faith_change !== 0) {
+    // Only update DB if model explicitly requested an update and asked for +/-1 (0 means no change)
+    if (parsed.update && typeof parsed.faith_change !== 'undefined' && parsed.faith_change !== 0) {
             try {
                 const cur = await db.getFaith(message.guild.id, message.author.id);
                 const last = new Date(cur?.updated_at || 0);
                 const now = new Date();
                 const minutes = parseInt(process.env.FAITH_UPDATE_COOLDOWN_MINUTES || '60', 10);
                 if ((now - last) / 60000 >= minutes) {
+                    // The DB addFaith will internally clamp to [-5, 20]
                     await db.addFaith(message.guild.id, message.author.id, parsed.faith_change);
                 }
             } catch (e) {

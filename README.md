@@ -20,7 +20,7 @@ Set `SETTINGS_FILE` to the path of your JSON file (e.g. `./settings.json`). The 
  - `punishMessages` (array of strings) — messages used when model returns `punish: true` (mandatory)
  - `guildConfigs` (optional) — per-guild welcome messages and roles
  - `faith.levels` (optional) — to override faith level labels
- - `faith.levels` (REQUIRED) — a mapping of level keys -5..5 to string labels. This file is now required; the bot will exit if it is missing or incomplete.
+ - `faith.levels` (REQUIRED) — a mapping of level keys -5..20 to string labels. This file is now required; the bot will exit if it is missing or incomplete.
 	- `AI_API_KEY`: Canonical API key used by the provider (OpenAI or third-party like Deepseek). We recommend setting this.
 	 - Old variable `OPENAI_API_KEY` is no longer supported; if you previously used it, move the value to `AI_API_KEY`.
  - `AI_API_BASE_URL`: Base URL for the API provider (ex: https://api.deepseek.com). If left empty the official OpenAI host is used.
