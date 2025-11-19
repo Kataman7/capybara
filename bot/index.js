@@ -198,13 +198,13 @@ client.on('interactionCreate', async (interaction) => {
         }
     } else if (commandName === 'leaderboard') {
         try {
-            const rows = await db.getWatermelonLeaderboard(interaction.guild.id, 10);
-            if (!rows || rows.length === 0) return await interaction.reply('Personne n\'a de watermelons encore.');
+            const rows = await db.getProductionLeaderboard(interaction.guild.id, 10);
+            if (!rows || rows.length === 0) return await interaction.reply('Personne n\'a encore de production.');
             
             // Trouver le rang de l'utilisateur
-            const allRows = await db.getWatermelonLeaderboard(interaction.guild.id, 1000);
+            const allRows = await db.getProductionLeaderboard(interaction.guild.id, 1000);
             const userRank = allRows.findIndex(r => r.discord_id === interaction.user.id) + 1;
-            const userMelons = allRows.find(r => r.discord_id === interaction.user.id)?.watermelon_count || 0;
+            const userScore = allRows.find(r => r.discord_id === interaction.user.id)?.total_score || 0;
             
             const lines = await Promise.all(rows.map(async (r, idx) => {
                 let memberName = r.discord_id;
@@ -217,13 +217,13 @@ client.on('interactionCreate', async (interaction) => {
                 const faithData = await db.getFaith(interaction.guild.id, r.discord_id) || { faith_level: 0, label: db.LEVELS['0'] };
                 const highlight = r.discord_id === interaction.user.id ? '**→ ' : '';
                 const highlightEnd = r.discord_id === interaction.user.id ? ' ←**' : '';
-                return `${highlight}${idx + 1}. ${memberName} — ${r.watermelon_count} 🍉 | ${faithData.label} (${faithData.faith_level})${highlightEnd}`;
+                return `${highlight}${idx + 1}. ${memberName} — ${r.total_score.toLocaleString()} pts | ${faithData.label} (${faithData.faith_level})${highlightEnd}`;
             }));
             
             const embed = new EmbedBuilder()
-                .setTitle('🏆 Top Watermelons')
+                .setTitle('🏆 Top Production Totale')
                 .setDescription(lines.join('\n'))
-                .setFooter({ text: userRank > 0 ? `Votre rang : #${userRank} (${userMelons} 🍉)` : 'Vous n\'avez pas encore de watermelons' });
+                .setFooter({ text: userRank > 0 ? `Votre rang : #${userRank} (${userScore.toLocaleString()} pts)` : 'Vous n\'avez pas encore de production' });
             
             await interaction.reply({ embeds: [embed] });
         } catch (err) {

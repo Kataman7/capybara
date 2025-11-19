@@ -277,6 +277,59 @@ async function addFaith(guildId, discordId, delta) {
   return getFaith(guildId, discordId);
 }
 
+// Calculate total production score (convert everything to watermelon equivalent)
+function calculateProductionScore(resources) {
+  const { PRODUCTION_CHAIN } = require('../productionChain');
+  
+  let score = resources.watermelon_count || 0;
+  
+  // For each level, multiply by its cost chain to get watermelon equivalent
+  let multiplier = 1;
+  for (let i = 1; i < PRODUCTION_CHAIN.length; i++) {
+    const level = PRODUCTION_CHAIN[i];
+    multiplier *= level.cost.amount;
+    const count = resources[level.id] || 0;
+    score += count * multiplier;
+  }
+  
+  return score;
+}
+
+// Get leaderboard based on total production value
+async function getProductionLeaderboard(guildId, limit = 10) {
+  const safeLimit = Math.max(1, Math.min(100, parseInt(limit, 10) || 10));
+  const allUsers = await query('SELECT * FROM faith_users WHERE guild_id = ?', [guildId]);
+  
+  // Calculate score for each user
+  const scored = allUsers.map(row => {
+    const resources = {
+      watermelon_count: row.watermelon_count || 0,
+      presse_melon: row.presse_melon || 0,
+      jardin_melonifique: row.jardin_melonifique || 0,
+      multiplicateur_agricolyte: row.multiplicateur_agricolyte || 0,
+      serre_auto_multipliee: row.serre_auto_multipliee || 0,
+      usine_hydro_melonique: row.usine_hydro_melonique || 0,
+      complexe_agricolo_energetique: row.complexe_agricolo_energetique || 0,
+      megastructure_melonospherique: row.megastructure_melonospherique || 0,
+      terraformeur_fruito_spherique: row.terraformeur_fruito_spherique || 0,
+      architecte_quantique_melon: row.architecte_quantique_melon || 0,
+      matrice_originelle_fruits: row.matrice_originelle_fruits || 0,
+      coeur_cosmique_watermelon: row.coeur_cosmique_watermelon || 0
+    };
+    
+    return {
+      discord_id: row.discord_id,
+      faith_level: row.faith_level,
+      watermelon_count: row.watermelon_count || 0,
+      total_score: calculateProductionScore(resources)
+    };
+  });
+  
+  // Sort by total score and limit
+  scored.sort((a, b) => b.total_score - a.total_score);
+  return scored.slice(0, safeLimit);
+}
+
 module.exports = {
   query,
   ensureUser,
@@ -286,6 +339,7 @@ module.exports = {
   getWatermelon,
   addWatermelon,
   getWatermelonLeaderboard,
+  getProductionLeaderboard,
   getProduction,
   updateResource,
   buyResource,
