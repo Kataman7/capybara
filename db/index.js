@@ -133,6 +133,131 @@ async function getWatermelonLeaderboard(guildId, limit = 10) {
   return res;
 }
 
+// Get all production resources for a user
+async function getProduction(guildId, discordId) {
+  const res = await query('SELECT * FROM faith_users WHERE guild_id = ? AND discord_id = ?', [guildId, discordId]);
+  if (res.length === 0) {
+    return {
+      watermelon_count: 0,
+      presse_melon: 0,
+      jardin_melonifique: 0,
+      multiplicateur_agricolyte: 0,
+      serre_auto_multipliee: 0,
+      usine_hydro_melonique: 0,
+      complexe_agricolo_energetique: 0,
+      megastructure_melonospherique: 0,
+      terraformeur_fruito_spherique: 0,
+      architecte_quantique_melon: 0,
+      matrice_originelle_fruits: 0,
+      coeur_cosmique_watermelon: 0
+    };
+  }
+  const row = res[0];
+  return {
+    watermelon_count: row.watermelon_count || 0,
+    presse_melon: row.presse_melon || 0,
+    jardin_melonifique: row.jardin_melonifique || 0,
+    multiplicateur_agricolyte: row.multiplicateur_agricolyte || 0,
+    serre_auto_multipliee: row.serre_auto_multipliee || 0,
+    usine_hydro_melonique: row.usine_hydro_melonique || 0,
+    complexe_agricolo_energetique: row.complexe_agricolo_energetique || 0,
+    megastructure_melonospherique: row.megastructure_melonospherique || 0,
+    terraformeur_fruito_spherique: row.terraformeur_fruito_spherique || 0,
+    architecte_quantique_melon: row.architecte_quantique_melon || 0,
+    matrice_originelle_fruits: row.matrice_originelle_fruits || 0,
+    coeur_cosmique_watermelon: row.coeur_cosmique_watermelon || 0
+  };
+}
+
+// Update a specific resource
+async function updateResource(guildId, discordId, resourceId, newValue) {
+  await ensureUser(guildId, discordId);
+  const safeValue = Math.max(0, parseInt(newValue, 10) || 0);
+  await query(`UPDATE faith_users SET ${resourceId} = ? WHERE guild_id = ? AND discord_id = ?`, [safeValue, guildId, discordId]);
+}
+
+// Buy as much as possible of a specific resource
+async function buyResource(guildId, discordId, resourceId, costResourceId, costAmount) {
+  await ensureUser(guildId, discordId);
+  const resources = await getProduction(guildId, discordId);
+  const available = resources[costResourceId] || 0;
+  const canBuy = Math.floor(available / costAmount);
+  
+  if (canBuy > 0) {
+    const newCostResource = available - (canBuy * costAmount);
+    const newTargetResource = (resources[resourceId] || 0) + canBuy;
+    
+    await query(`UPDATE faith_users SET ${costResourceId} = ?, ${resourceId} = ? WHERE guild_id = ? AND discord_id = ?`, 
+      [newCostResource, newTargetResource, guildId, discordId]);
+    
+    return { bought: canBuy, remaining: newCostResource };
+  }
+  
+  return { bought: 0, remaining: available };
+}
+
+// Apply production from all producers (called after successful farm)
+async function applyProduction(guildId, discordId) {
+  await ensureUser(guildId, discordId);
+  const resources = await getProduction(guildId, discordId);
+  
+  // Production chain (from highest to lowest, excluding watermelon_count)
+  const productionOrder = [
+    { producer: 'coeur_cosmique_watermelon', produces: 'matrice_originelle_fruits' },
+    { producer: 'matrice_originelle_fruits', produces: 'architecte_quantique_melon' },
+    { producer: 'architecte_quantique_melon', produces: 'terraformeur_fruito_spherique' },
+    { producer: 'terraformeur_fruito_spherique', produces: 'megastructure_melonospherique' },
+    { producer: 'megastructure_melonospherique', produces: 'complexe_agricolo_energetique' },
+    { producer: 'complexe_agricolo_energetique', produces: 'usine_hydro_melonique' },
+    { producer: 'usine_hydro_melonique', produces: 'serre_auto_multipliee' },
+    { producer: 'serre_auto_multipliee', produces: 'multiplicateur_agricolyte' },
+    { producer: 'multiplicateur_agricolyte', produces: 'jardin_melonifique' },
+    { producer: 'jardin_melonifique', produces: 'presse_melon' },
+    { producer: 'presse_melon', produces: 'watermelon_count' }
+  ];
+  
+  // Apply production in cascade
+  for (const { producer, produces } of productionOrder) {
+    const producerCount = resources[producer] || 0;
+    if (producerCount > 0) {
+      resources[produces] = (resources[produces] || 0) + producerCount;
+    }
+  }
+  
+  // Update all resources in one query
+  await query(`UPDATE faith_users SET 
+    watermelon_count = ?,
+    presse_melon = ?,
+    jardin_melonifique = ?,
+    multiplicateur_agricolyte = ?,
+    serre_auto_multipliee = ?,
+    usine_hydro_melonique = ?,
+    complexe_agricolo_energetique = ?,
+    megastructure_melonospherique = ?,
+    terraformeur_fruito_spherique = ?,
+    architecte_quantique_melon = ?,
+    matrice_originelle_fruits = ?,
+    coeur_cosmique_watermelon = ?
+    WHERE guild_id = ? AND discord_id = ?`, [
+    resources.watermelon_count,
+    resources.presse_melon,
+    resources.jardin_melonifique,
+    resources.multiplicateur_agricolyte,
+    resources.serre_auto_multipliee,
+    resources.usine_hydro_melonique,
+    resources.complexe_agricolo_energetique,
+    resources.megastructure_melonospherique,
+    resources.terraformeur_fruito_spherique,
+    resources.architecte_quantique_melon,
+    resources.matrice_originelle_fruits,
+    resources.coeur_cosmique_watermelon,
+    guildId,
+    discordId
+  ]);
+  
+  return resources;
+}
+
 async function setFaith(guildId, discordId, newFaith) {
   // clamp
   if (newFaith > 20) newFaith = 20;
@@ -161,5 +286,9 @@ module.exports = {
   getWatermelon,
   addWatermelon,
   getWatermelonLeaderboard,
+  getProduction,
+  updateResource,
+  buyResource,
+  applyProduction,
   LEVELS,
 };

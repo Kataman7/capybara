@@ -22,6 +22,7 @@ const token = process.env.DISCORD_TOKEN;
 
 const ai = require('./aiClient');
 const db = require('../db');
+const { PRODUCTION_CHAIN, getLevel, getProducers } = require('../productionChain');
 
 const cooldowns = new Map();
 const cooldownAmount = 30 * 60 * 1000;
@@ -94,6 +95,14 @@ client.once(Events.ClientReady, async () => {
             return;
         }
     }
+    
+    // Supprimer toutes les anciennes commandes
+    const existingCommands = await guild.commands.fetch();
+    for (const [id, command] of existingCommands) {
+        await guild.commands.delete(id);
+        console.log(`Deleted command: ${command.name}`);
+    }
+    
     // Commands like eval and faith
     const evalCmd = new SlashCommandBuilder()
         .setName('eval')
@@ -103,23 +112,29 @@ client.once(Events.ClientReady, async () => {
 
     await guild.commands.create(evalCmd);
 
-    const faithCmd = new SlashCommandBuilder()
-        .setName('faith')
-        .setDescription("Affiche votre foi et vos watermelons");
+    const profilCmd = new SlashCommandBuilder()
+        .setName('profil')
+        .setDescription("Affiche votre profil complet: foi, watermelons et production");
 
-    await guild.commands.create(faithCmd);
+    await guild.commands.create(profilCmd);
 
-    const watermelonCmd = new SlashCommandBuilder()
-        .setName('watermelon')
+    const farmCmd = new SlashCommandBuilder()
+        .setName('farm')
         .setDescription("Farmer des watermelons (cooldown 3h)");
 
-    await guild.commands.create(watermelonCmd);
+    await guild.commands.create(farmCmd);
 
     const leaderboardCmd = new SlashCommandBuilder()
         .setName('leaderboard')
         .setDescription("Affiche le classement des watermelons et votre rang");
 
     await guild.commands.create(leaderboardCmd);
+
+    const buyCmd = new SlashCommandBuilder()
+        .setName('buy')
+        .setDescription("Achète automatiquement toutes les améliorations possibles");
+
+    await guild.commands.create(buyCmd);
     console.log('run');
 });
 
@@ -148,22 +163,37 @@ client.on('interactionCreate', async (interaction) => {
     if (!interaction.isCommand()) return;
     const { commandName, options } = interaction;
 
-    if (commandName === 'faith') {
+    if (commandName === 'profil') {
         const user = interaction.user;
         try {
             const faithData = await db.getFaith(interaction.guild.id, user.id) || { faith_level: 0, label: db.LEVELS['0'] };
-            const watermelonData = await db.getWatermelon(interaction.guild.id, user.id) || { watermelon_count: 0 };
+            const resources = await db.getProduction(interaction.guild.id, user.id);
+            
+            // Construire les champs pour l'embed
+            const fields = [
+                { name: '⭐ Foi', value: `**${faithData.label}**\nPalier: \`${faithData.faith_level}\``, inline: false }
+            ];
+            
+            // Ajouter toutes les ressources avec leurs quantités
+            for (const level of PRODUCTION_CHAIN) {
+                const count = resources[level.id] || 0;
+                if (count > 0 || level.id === 'watermelon_count') {
+                    fields.push({
+                        name: `${level.emoji} ${level.name}`,
+                        value: `${count}`,
+                        inline: true
+                    });
+                }
+            }
             
             const embed = new EmbedBuilder()
-                .setTitle(`Profil de ${user.username}`)
-                .addFields(
-                    { name: 'Foi', value: `**${faithData.label}** (palier \`${faithData.faith_level}\`)`, inline: false },
-                    { name: 'Watermelons', value: `${watermelonData.watermelon_count} 🍉`, inline: false }
-                );
+                .setTitle(`📊 Profil de ${user.username}`)
+                .addFields(fields)
+                .setColor(0x00D4FF);
             
             await interaction.reply({ embeds: [embed] });
         } catch (err) {
-            console.error('Error while handling /faith command:', err);
+            console.error('Error while handling /profil command:', err);
             await interaction.reply({ content: 'Impossible de récupérer les données (erreur serveur).', ephemeral: true });
         }
     } else if (commandName === 'leaderboard') {
@@ -200,7 +230,56 @@ client.on('interactionCreate', async (interaction) => {
             console.error('Error while fetching leaderboard:', err);
             await interaction.reply({ content: 'Impossible de récupérer le leaderboard (erreur serveur).', ephemeral: true });
         }
-    } else if (commandName === 'watermelon') {
+    } else if (commandName === 'buy') {
+        try {
+            await interaction.deferReply();
+            
+            const resources = await db.getProduction(interaction.guild.id, interaction.user.id);
+            const purchases = [];
+            
+            // Acheter dans l'ordre (du bas vers le haut pour maximiser les achats)
+            for (let i = PRODUCTION_CHAIN.length - 1; i >= 0; i--) {
+                const level = PRODUCTION_CHAIN[i];
+                if (!level.cost) continue; // Skip watermelon (pas d'achat possible)
+                
+                const costResource = level.cost.resource;
+                const costAmount = level.cost.amount;
+                
+                const result = await db.buyResource(
+                    interaction.guild.id,
+                    interaction.user.id,
+                    level.id,
+                    costResource,
+                    costAmount
+                );
+                
+                if (result.bought > 0) {
+                    purchases.push(`${level.emoji} **${level.name}** x${result.bought}`);
+                }
+                
+                // Re-fetch pour les achats suivants
+                resources[level.id] = (resources[level.id] || 0) + result.bought;
+                resources[costResource] = result.remaining;
+            }
+            
+            if (purchases.length === 0) {
+                await interaction.editReply('❌ Aucun achat possible. Tu n\'as pas assez de ressources !');
+            } else {
+                const embed = new EmbedBuilder()
+                    .setTitle('✅ Achats effectués !')
+                    .setDescription(purchases.join('\n'))
+                    .setColor(0x00FF00);
+                await interaction.editReply({ embeds: [embed] });
+            }
+        } catch (err) {
+            console.error('Error while buying:', err);
+            try {
+                await interaction.editReply({ content: 'Erreur lors de l\'achat (erreur serveur).' });
+            } catch (e) {
+                await interaction.followUp({ content: 'Erreur lors de l\'achat (erreur serveur).', ephemeral: true });
+            }
+        }
+    } else if (commandName === 'farm') {
         const key = `${interaction.guild.id}:${interaction.user.id}`;
         const last = watermelonCooldowns.get(key);
         const now = Date.now();
@@ -368,9 +447,32 @@ RÈGLES CRITIQUES :
 
                     const after = await db.addWatermelon(interaction.guild.id, interaction.user.id, finalDelta);
 
+                    // Si le résultat est positif (farm réussi), appliquer la production
+                    let productionText = '';
+                    if (finalDelta > 0) {
+                        const productionBefore = await db.getProduction(interaction.guild.id, interaction.user.id);
+                        await db.applyProduction(interaction.guild.id, interaction.user.id);
+                        const productionAfter = await db.getProduction(interaction.guild.id, interaction.user.id);
+                        
+                        // Construire le texte de production
+                        const productionChanges = [];
+                        for (const level of getProducers()) {
+                            const produced = (productionAfter[level.produces.resource] || 0) - (productionBefore[level.produces.resource] || 0);
+                            if (produced > 0) {
+                                const producerLevel = getLevel(level.id);
+                                const producedLevel = getLevel(level.produces.resource);
+                                productionChanges.push(`${producerLevel.emoji} → +${produced} ${producedLevel.emoji}`);
+                            }
+                        }
+                        
+                        if (productionChanges.length > 0) {
+                            productionText = '\n\n**🏭 Production appliquée:**\n' + productionChanges.join('\n');
+                        }
+                    }
+
                     const resultEmbed = new EmbedBuilder()
                         .setTitle(isDivine ? 'Jugement du dieu Capybara' : 'Résultat de la récolte')
-                        .setDescription(choice.consequence || '')
+                        .setDescription((choice.consequence || '') + productionText)
                         .addFields({ name: 'Gagné/perdu', value: `${finalDelta >= 0 ? '+' : ''}${finalDelta} 🍉`, inline: true }, { name: 'Total', value: `${after.watermelon_count} 🍉`, inline: true });
 
                     // Disable buttons
