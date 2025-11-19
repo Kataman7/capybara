@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS faith_users (
   guild_id VARCHAR(32) NOT NULL,
   discord_id VARCHAR(32) NOT NULL,
   faith_level INT DEFAULT 0,
+  watermelon_count INT DEFAULT 0,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY unique_guild_user (guild_id, discord_id)

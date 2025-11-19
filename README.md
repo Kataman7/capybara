@@ -24,3 +24,8 @@ Set `SETTINGS_FILE` to the path of your JSON file (e.g. `./settings.json`). The 
 	- `AI_API_KEY`: Canonical API key used by the provider (OpenAI or third-party like Deepseek). We recommend setting this.
 	 - Old variable `OPENAI_API_KEY` is no longer supported; if you previously used it, move the value to `AI_API_KEY`.
  - `AI_API_BASE_URL`: Base URL for the API provider (ex: https://api.deepseek.com). If left empty the official OpenAI host is used.
+
+Watermelon minigame:
+- Use `/watermelon view [user]` to see your or another user's melon count.
+- Use `/watermelon leaderboard` to view top 10 farmers.
+- Use `/watermelon farm` to attempt a harvest (3 hour cooldown). The bot will call the AI to generate a scenario and present two choices; choose by clicking a button. Your faith level influences the chance of a positive outcome. The bot will update your watermelon count accordingly.

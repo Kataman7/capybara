@@ -105,8 +105,32 @@ async function getFaith(guildId, discordId) {
     discord_id: row.discord_id,
     faith_level: row.faith_level,
     label: LEVELS[row.faith_level],
+    watermelon_count: row.watermelon_count || 0,
     updated_at: row.updated_at
   };
+}
+
+async function getWatermelon(guildId, discordId) {
+  const res = await query('SELECT watermelon_count FROM faith_users WHERE guild_id = ? AND discord_id = ?', [guildId, discordId]);
+  if (res.length === 0) return { watermelon_count: 0 };
+  return { watermelon_count: res[0].watermelon_count };
+}
+
+async function addWatermelon(guildId, discordId, delta) {
+  await ensureUser(guildId, discordId);
+  delta = parseInt(delta, 10) || 0;
+  // clamp delta magnitude so we don't allow huge swings
+  const clamped = Math.max(-15, Math.min(15, delta));
+  // Update and ensure non-negative total
+  await query('UPDATE faith_users SET watermelon_count = GREATEST(0, watermelon_count + ?) WHERE guild_id = ? AND discord_id = ?', [clamped, guildId, discordId]);
+  return getWatermelon(guildId, discordId);
+}
+
+async function getWatermelonLeaderboard(guildId, limit = 10) {
+  // MySQL doesn't support prepared statement params for LIMIT, so we sanitize and inject directly
+  const safeLimit = Math.max(1, Math.min(100, parseInt(limit, 10) || 10));
+  const res = await query(`SELECT discord_id, watermelon_count FROM faith_users WHERE guild_id = ? ORDER BY watermelon_count DESC LIMIT ${safeLimit}`, [guildId]);
+  return res;
 }
 
 async function setFaith(guildId, discordId, newFaith) {
@@ -134,5 +158,8 @@ module.exports = {
   getFaith,
   setFaith,
   addFaith,
+  getWatermelon,
+  addWatermelon,
+  getWatermelonLeaderboard,
   LEVELS,
 };
