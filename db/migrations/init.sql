@@ -18,6 +18,8 @@ CREATE TABLE IF NOT EXISTS faith_users (
   architecte_quantique_melon INT DEFAULT 0,
   matrice_originelle_fruits INT DEFAULT 0,
   coeur_cosmique_watermelon INT DEFAULT 0,
+  blessing_multiplier DECIMAL(5,2) NOT NULL DEFAULT 1.00,
+  blessing_charges INT NOT NULL DEFAULT 0,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY unique_guild_user (guild_id, discord_id)

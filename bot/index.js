@@ -1,31 +1,20 @@
-const {
+﻿const {
     Client,
     Events,
     GatewayIntentBits,
-    AttachmentBuilder,
-    EmbedBuilder,
-    SlashCommandBuilder,
-    ActionRowBuilder,
-    ButtonBuilder,
-    ButtonStyle,
-    PermissionFlagsBits,
-    PermissionsBitField,
     Partials,
-    ChannelType,
 } = require('discord.js');
 
 require('dotenv').config();
 const fs = require('fs');
 
-// Read Discord token from environment
 const token = process.env.DISCORD_TOKEN;
 
-const ai = require('./aiClient');
+const ai = require('./services/aiClient');
 const db = require('../db');
-const { PRODUCTION_CHAIN, getLevel, getProducers } = require('../productionChain');
+const commandRegistry = require('./commands');
+const createScenarioService = require('./services/scenarioService');
 
-const cooldowns = new Map();
-const cooldownAmount = 30 * 60 * 1000;
 const watermelonCooldowns = new Map();
 const WATERMELON_COOLDOWN_MS = (parseInt(process.env.WATERMELON_COOLDOWN_HOURS || '3', 10) * 60 * 60 * 1000);
 
@@ -45,7 +34,6 @@ const client = new Client({
     partials: [Partials.Message, Partials.Channel, Partials.Reaction],
 });
 
-// Load settings file. Default to root-level `settings.json` to make configuration simple.
 const settingsFilePath = process.env.SETTINGS_FILE || './settings.json';
 if (!fs.existsSync(settingsFilePath)) {
     console.error(`Missing settings file: ${settingsFilePath}. Please create it from settings.example.json and set SETTINGS_FILE.`);
@@ -61,7 +49,6 @@ if (!Array.isArray(settings.punishMessages) || settings.punishMessages.length ==
     console.error('settings.punishMessages is required and must be a non-empty array in your settings JSON. Check settings.example.json');
     process.exit(1);
 }
-// Validate faith.levels presence and completeness: keys -5..20 are mandatory
 if (!settings.faith || !settings.faith.levels) {
     console.error('settings.json must include `faith.levels` mapping with keys -5..20. See settings.example.json');
     process.exit(1);
@@ -73,19 +60,18 @@ for (let i = -5; i <= 20; i++) {
     }
 }
 
-// Build system prompt
 const promptSystem = Array.isArray(settings.promptSystem) ? settings.promptSystem.join('\n') : settings.promptSystem;
 
 const messageMemory = [
     { role: 'system', content: promptSystem },
 ];
 
+const scenarioService = createScenarioService(ai, settings);
+
 client.login(token);
 
-
 client.once(Events.ClientReady, async () => {
-    // Récupère le guild après connexion
-    const guildId = "960831251126824980";
+    const guildId = process.env.PRIMARY_GUILD_ID || "960831251126824980";
     let guild = client.guilds.cache.get(guildId);
     if (!guild) {
         try {
@@ -96,46 +82,8 @@ client.once(Events.ClientReady, async () => {
         }
     }
     
-    // Supprimer toutes les anciennes commandes
-    const existingCommands = await guild.commands.fetch();
-    for (const [id, command] of existingCommands) {
-        await guild.commands.delete(id);
-        console.log(`Deleted command: ${command.name}`);
-    }
-    
-    // Commands like eval and faith
-    const evalCmd = new SlashCommandBuilder()
-        .setName('eval')
-        .setDescription('Évalue du code JavaScript')
-        .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers)
-        .addStringOption(option => option.setName('code').setDescription('Le code à évaluer').setRequired(true));
-
-    await guild.commands.create(evalCmd);
-
-    const profilCmd = new SlashCommandBuilder()
-        .setName('profil')
-        .setDescription("Affiche votre profil complet: foi, watermelons et production");
-
-    await guild.commands.create(profilCmd);
-
-    const farmCmd = new SlashCommandBuilder()
-        .setName('farm')
-        .setDescription("Farmer des watermelons (cooldown 3h)");
-
-    await guild.commands.create(farmCmd);
-
-    const leaderboardCmd = new SlashCommandBuilder()
-        .setName('leaderboard')
-        .setDescription("Affiche le classement des watermelons et votre rang");
-
-    await guild.commands.create(leaderboardCmd);
-
-    const buyCmd = new SlashCommandBuilder()
-        .setName('buy')
-        .setDescription("Achète automatiquement toutes les améliorations possibles");
-
-    await guild.commands.create(buyCmd);
-    console.log('run');
+    await commandRegistry.syncGuildCommands(guild);
+    console.log('Bot ready!');
 });
 
 client.on(Events.MessageCreate, async (message) => {
@@ -143,7 +91,7 @@ client.on(Events.MessageCreate, async (message) => {
     if (!message.content) return;
     if (!message.guild) return;
 
-    if (message.guild.id !== '960831251126824980') return; // only on sanctuary server
+    if (message.guild.id !== '960831251126824980') return;
 
     if (message.content.includes('<@959427012194349088>')) {
         chatGpt(message, `${message.member.nickname} s'adresse à toi :`);
@@ -160,362 +108,16 @@ client.on(Events.MessageCreate, async (message) => {
 });
 
 client.on('interactionCreate', async (interaction) => {
-    if (!interaction.isCommand()) return;
-    const { commandName, options } = interaction;
-
-    if (commandName === 'profil') {
-        const user = interaction.user;
-        try {
-            const faithData = await db.getFaith(interaction.guild.id, user.id) || { faith_level: 0, label: db.LEVELS['0'] };
-            const resources = await db.getProduction(interaction.guild.id, user.id);
-            
-            // Construire les champs pour l'embed
-            const fields = [
-                { name: '⭐ Foi', value: `**${faithData.label}**\nPalier: \`${faithData.faith_level}\``, inline: false }
-            ];
-            
-            // Ajouter toutes les ressources avec leurs quantités
-            for (const level of PRODUCTION_CHAIN) {
-                const count = resources[level.id] || 0;
-                if (count > 0 || level.id === 'watermelon_count') {
-                    fields.push({
-                        name: `${level.emoji} ${level.name}`,
-                        value: `${count}`,
-                        inline: true
-                    });
-                }
-            }
-            
-            const embed = new EmbedBuilder()
-                .setTitle(`📊 Profil de ${user.username}`)
-                .addFields(fields)
-                .setColor(0x00D4FF);
-            
-            await interaction.reply({ embeds: [embed] });
-        } catch (err) {
-            console.error('Error while handling /profil command:', err);
-            await interaction.reply({ content: 'Impossible de récupérer les données (erreur serveur).', ephemeral: true });
-        }
-    } else if (commandName === 'leaderboard') {
-        try {
-            const rows = await db.getProductionLeaderboard(interaction.guild.id, 10);
-            if (!rows || rows.length === 0) return await interaction.reply('Personne n\'a encore de production.');
-            
-            // Trouver le rang de l'utilisateur
-            const allRows = await db.getProductionLeaderboard(interaction.guild.id, 1000);
-            const userRank = allRows.findIndex(r => r.discord_id === interaction.user.id) + 1;
-            const userScore = allRows.find(r => r.discord_id === interaction.user.id)?.total_score || 0;
-            
-            const lines = await Promise.all(rows.map(async (r, idx) => {
-                let memberName = r.discord_id;
-                try {
-                    const m = await interaction.guild.members.fetch(r.discord_id);
-                    memberName = m.displayName || m.user.username;
-                } catch (e) {
-                    // leave discord id
-                }
-                const faithData = await db.getFaith(interaction.guild.id, r.discord_id) || { faith_level: 0, label: db.LEVELS['0'] };
-                const highlight = r.discord_id === interaction.user.id ? '**→ ' : '';
-                const highlightEnd = r.discord_id === interaction.user.id ? ' ←**' : '';
-                return `${highlight}${idx + 1}. ${memberName} — ${r.total_score.toLocaleString()} pts | ${faithData.label} (${faithData.faith_level})${highlightEnd}`;
-            }));
-            
-            const embed = new EmbedBuilder()
-                .setTitle('🏆 Top Production Totale')
-                .setDescription(lines.join('\n'))
-                .setFooter({ text: userRank > 0 ? `Votre rang : #${userRank} (${userScore.toLocaleString()} pts)` : 'Vous n\'avez pas encore de production' });
-            
-            await interaction.reply({ embeds: [embed] });
-        } catch (err) {
-            console.error('Error while fetching leaderboard:', err);
-            await interaction.reply({ content: 'Impossible de récupérer le leaderboard (erreur serveur).', ephemeral: true });
-        }
-    } else if (commandName === 'buy') {
-        try {
-            await interaction.deferReply();
-            
-            const resources = await db.getProduction(interaction.guild.id, interaction.user.id);
-            const purchases = [];
-            
-            // Acheter dans l'ordre (du bas vers le haut pour maximiser les achats)
-            for (let i = PRODUCTION_CHAIN.length - 1; i >= 0; i--) {
-                const level = PRODUCTION_CHAIN[i];
-                if (!level.cost) continue; // Skip watermelon (pas d'achat possible)
-                
-                const costResource = level.cost.resource;
-                const costAmount = level.cost.amount;
-                
-                const result = await db.buyResource(
-                    interaction.guild.id,
-                    interaction.user.id,
-                    level.id,
-                    costResource,
-                    costAmount
-                );
-                
-                if (result.bought > 0) {
-                    purchases.push(`${level.emoji} **${level.name}** x${result.bought}`);
-                }
-                
-                // Re-fetch pour les achats suivants
-                resources[level.id] = (resources[level.id] || 0) + result.bought;
-                resources[costResource] = result.remaining;
-            }
-            
-            if (purchases.length === 0) {
-                await interaction.editReply('❌ Aucun achat possible. Tu n\'as pas assez de ressources !');
-            } else {
-                const embed = new EmbedBuilder()
-                    .setTitle('✅ Achats effectués !')
-                    .setDescription(purchases.join('\n'))
-                    .setColor(0x00FF00);
-                await interaction.editReply({ embeds: [embed] });
-            }
-        } catch (err) {
-            console.error('Error while buying:', err);
-            try {
-                await interaction.editReply({ content: 'Erreur lors de l\'achat (erreur serveur).' });
-            } catch (e) {
-                await interaction.followUp({ content: 'Erreur lors de l\'achat (erreur serveur).', ephemeral: true });
-            }
-        }
-    } else if (commandName === 'farm') {
-        const key = `${interaction.guild.id}:${interaction.user.id}`;
-        const last = watermelonCooldowns.get(key);
-        const now = Date.now();
-        if (last && (now - last) < WATERMELON_COOLDOWN_MS) {
-            const remaining = WATERMELON_COOLDOWN_MS - (now - last);
-            const mins = Math.ceil(remaining / 60000);
-            return await interaction.reply({ content: `Tu dois attendre encore ${mins} minutes avant de farmer à nouveau.`, ephemeral: true });
-        }
-
-            // Defer immediately to avoid "Unknown interaction" timeout (Discord gives 3s to respond)
-            await interaction.deferReply();
-
-            // Set cooldown immediately (prevents spam)
-            watermelonCooldowns.set(key, now);
-
-            // 20% chance d'événement divin, sinon dilemme éthique subtil
-            const isDivine = Math.random() < 0.3;
-            let control;
-            if (isDivine) {
-                control = {
-                    role: 'system',
-                    content: `Tu es le dieu Capybara, divinité suprême de la pastèque. Tu interviens de façon spectaculaire ou mystérieuse dans la ferme du joueur. Génère un SCÉNARIO D'ÉPREUVE DIVINE, où tu testes la foi, la loyauté ou l'humilité du joueur, ou tu proposes une bénédiction/malédiction. Le scénario doit être original, parfois absurde, toujours en français, et donner deux choix difficiles : l'un montre la foi ou la sagesse, l'autre la peur, l'orgueil ou le doute. Structure JSON :
-{
-  "scenario": "Description courte EN FRANÇAIS (2-3 phrases) d'une intervention divine du dieu Capybara, qui met à l'épreuve le joueur ou sa ferme.",
-  "choices": [
-    {
-      "text": "Choix de foi ou de sagesse EN FRANÇAIS (5-10 mots)",
-      "consequence": "Conséquence EN FRANÇAIS (1-2 phrases, bénédiction, miracle, ou épreuve surmontée)",
-      "base_delta": <entier -15 à 15>
-    },
-    {
-      "text": "Choix de doute, orgueil ou peur EN FRANÇAIS (5-10 mots)",
-      "consequence": "Conséquence EN FRANÇAIS (1-2 phrases, malédiction, perte, ou leçon divine)",
-      "base_delta": <entier -15 à 15>
-    }
-  ]
-}
-RÈGLES :
-- TOUT doit être EN FRANÇAIS.
-- L'intervention doit être inattendue, mystique ou absurde, mais toujours dans le thème Capybara et pastèque.
-- Le choix de foi ou de sagesse doit être récompensé (base_delta plus positif), mais pas toujours évident.
-- Les conséquences peuvent être surnaturelles, symboliques ou très originales.
-- Exemples :
-  * Choix A : « Offrir la plus belle pastèque au dieu Capybara » → +10 (bénédiction mystique)
-  * Choix B : « Garder toutes les pastèques pour soi » → 0 (Capybara boude la ferme)
-- Retourne UNIQUEMENT du JSON, sans markdown ni texte supplémentaire.`
-                };
-            } else {
-                control = {
-                    role: 'system',
-                    content: `Tu es un générateur de dilemmes éthiques agricoles pour un mini-jeu de farm de pastèques. Ta mission : créer des scénarios INÉDITS, TRÈS SUBTILS, AMBIGUS, CRÉATIFS et surtout PIÉGEUX, ancrés dans la réalité agricole, sans manichéisme ni stéréotype. Les conséquences peuvent être sociales, écologiques, spirituelles, symboliques ou matérielles.
-
-RETOURNE UNIQUEMENT du JSON VALIDE avec cette structure :
-{
-    "scenario": "Description courte EN FRANÇAIS (2-3 phrases) présentant un dilemme moral ou éthique LIÉ À LA CULTURE DE PASTÈQUES. Le dilemme doit être subtil, crédible, et ne pas opposer de façon évidente le bien et le mal. Exemples de tensions : tradition vs modernité, biodiversité vs rendement, entraide vs autonomie, discrétion vs transparence, respect du rythme naturel vs pression du marché, etc.",
-    "choices": [
-        {
-            "text": "Choix éthique subtil EN FRANÇAIS (5-10 mots)",
-            "consequence": "Conséquence EN FRANÇAIS (1-2 phrases, reflétant la dimension morale ou sociale subtile)",
-            "base_delta": <entier -15 à 15>
-        },
-        {
-            "text": "Autre choix éthique subtil EN FRANÇAIS (5-10 mots)",
-            "consequence": "Conséquence EN FRANÇAIS (1-2 phrases, reflétant la dimension morale ou sociale subtile)",
-            "base_delta": <entier -15 à 15>
-        }
-    ]
-}
-
-RÈGLES CRITIQUES :
-- TOUT doit être EN FRANÇAIS, sans exception.
-- Le dilemme doit être RÉELLEMENT AMBIGU, chaque choix ayant un poids moral ou social, mais la solution la plus éthique doit être DIFFICILE À DÉTECTER, parfois CONTRE-INTUITIVE, et RÉCOMPENSÉE (base_delta plus positif sur le long terme).
-- Chaque choix doit avoir des avantages immédiats ou des justifications valables (pas de choix manifestement mauvais).
-- La conséquence négative d’un choix peu éthique ne doit pas être évidente, mais se révéler subtilement à long terme (ex : perte de confiance, appauvrissement du sol, isolement, etc).
-- La solution la plus éthique doit parfois sembler risquée, coûteuse, ou même légèrement désavantageuse à court terme.
-- Les deux choix doivent paraître acceptables, tentants ou logiques selon le contexte, mais l’un est plus éthique sur le plan collectif, écologique ou spirituel.
-- N’utilise JAMAIS de mots évidents comme « voler », « malhonnête », « crime », etc. Privilégie la nuance, la subtilité, la vraisemblance.
-- Les conséquences peuvent toucher la réputation, la biodiversité, la confiance du village, la bénédiction des capybaras, la transmission du savoir, etc.
-- Exemples :
-    * Choix A : « Accepter l’aide d’un voisin envahissant » → +8 (entraide, mais perte d’autonomie)
-    * Choix B : « Refuser poliment pour préserver son indépendance » → +4 (fierté, mais moins de liens sociaux)
-    * Choix A : « Planter une variété rare mais fragile » → +9 (risque, mais biodiversité accrue)
-    * Choix B : « Choisir une variété robuste et commune » → +5 (sécurité, mais uniformité)
-- Les conséquences doivent être subtiles, parfois inattendues, et toujours ancrées dans la réalité agricole.
-- base_delta entre -15 et 15.
-- Retourne UNIQUEMENT du JSON, sans markdown ni texte supplémentaire.`
-                };
-            }
-
-            try {
-                const completion = await ai.sendChat([control, ...messageMemory], process.env.AI_MODEL || 'gpt-3.5-turbo');
-                const raw = completion.choices[0].message.content;
-                let cleaned = raw.trim();
-                if (cleaned.startsWith('```')) cleaned = cleaned.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
-                let parsed;
-                try { parsed = JSON.parse(cleaned); } catch (e) { parsed = null; }
-                if (!parsed || !Array.isArray(parsed.choices) || parsed.choices.length !== 2) {
-                    // fallback simple scenario
-                    parsed = { 
-                        scenario: 'Un capybara mystérieux observe ton champ de pastèques depuis la rivière...', 
-                        choices: [ 
-                            { text: 'Lui offrir une pastèque', consequence: 'Le capybara bénit ton champ avec gratitude', base_delta: 3 }, 
-                            { text: 'Continuer à arroser sans rien faire', consequence: 'Le capybara repart, indifférent', base_delta: 1 } 
-                        ] 
-                    };
-                }
-
-                // Validate base deltas (clamp to -15..15)
-                parsed.choices.forEach(c => { 
-                    c.base_delta = Math.max(-15, Math.min(15, parseInt(c.base_delta || 0, 10))); 
-                });
-
-                const embed = new EmbedBuilder()
-                    .setTitle(isDivine ? 'Épreuve divine du dieu Capybara' : 'Farmer des watermelons')
-                    .setDescription(parsed.scenario)
-                    .addFields({ name: 'Choix A', value: parsed.choices[0].text || '...', inline: true }, { name: 'Choix B', value: parsed.choices[1].text || '...', inline: true });
-
-                const aId = `watermelon_choice:${interaction.guild.id}:${interaction.user.id}:0:${Date.now()}`;
-                const bId = `watermelon_choice:${interaction.guild.id}:${interaction.user.id}:1:${Date.now()}`;
-                const row = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId(aId).setLabel('Choix A').setStyle(ButtonStyle.Primary),
-                    new ButtonBuilder().setCustomId(bId).setLabel('Choix B').setStyle(ButtonStyle.Secondary)
-                );
-
-                // Send the scenario with buttons (use editReply since we deferred)
-                const message = await interaction.editReply({ embeds: [embed], components: [row] });
-
-                // Wait for button click by original user only
-                const collector = message.createMessageComponentCollector({ time: 2 * 60 * 1000 });
-                collector.on('collect', async i => {
-                    if (i.user.id !== interaction.user.id) return i.reply({ content: 'Ce bouton n\'est pas pour toi.', ephemeral: true });
-                    await i.deferUpdate();
-                    const parts = i.customId.split(':');
-                    const choiceIdx = parseInt(parts[3], 10);
-                    const choice = parsed.choices[choiceIdx];
-                    const curFaith = await db.getFaith(interaction.guild.id, interaction.user.id) || { faith_level: 0 };
-                    const faith = curFaith.faith_level || 0;
-                    
-                    // Faith has a SMALL influence on outcomes (luck factor)
-                    // Range: 0.4 to 0.65 (small variance, not game-breaking)
-                    const luck = Math.max(0.4, Math.min(0.65, 0.5 + (faith / 100)));
-                    const roll = Math.random();
-                    
-                    let finalDelta = choice.base_delta;
-                    
-                    // Small variance based on luck (±20% of base_delta)
-                    if (choice.base_delta !== 0) {
-                        const variance = Math.floor(Math.abs(choice.base_delta) * 0.2);
-                        if (roll <= luck) {
-                            // Slightly better outcome
-                            if (choice.base_delta > 0) {
-                                finalDelta = choice.base_delta + Math.floor(Math.random() * (variance + 1));
-                            } else {
-                                finalDelta = choice.base_delta + Math.floor(Math.random() * (variance + 1)); // Less negative
-                            }
-                        } else {
-                            // Slightly worse outcome
-                            if (choice.base_delta > 0) {
-                                finalDelta = choice.base_delta - Math.floor(Math.random() * (variance + 1));
-                            } else {
-                                finalDelta = choice.base_delta - Math.floor(Math.random() * (variance + 1)); // More negative
-                            }
-                        }
-                    }
-
-                    const after = await db.addWatermelon(interaction.guild.id, interaction.user.id, finalDelta);
-
-                    // Si le résultat est positif (farm réussi), appliquer la production
-                    let productionText = '';
-                    if (finalDelta > 0) {
-                        const productionBefore = await db.getProduction(interaction.guild.id, interaction.user.id);
-                        await db.applyProduction(interaction.guild.id, interaction.user.id);
-                        const productionAfter = await db.getProduction(interaction.guild.id, interaction.user.id);
-                        
-                        // Construire le texte de production
-                        const productionChanges = [];
-                        for (const level of getProducers()) {
-                            const produced = (productionAfter[level.produces.resource] || 0) - (productionBefore[level.produces.resource] || 0);
-                            if (produced > 0) {
-                                const producerLevel = getLevel(level.id);
-                                const producedLevel = getLevel(level.produces.resource);
-                                productionChanges.push(`${producerLevel.emoji} → +${produced} ${producedLevel.emoji}`);
-                            }
-                        }
-                        
-                        if (productionChanges.length > 0) {
-                            productionText = '\n\n**🏭 Production appliquée:**\n' + productionChanges.join('\n');
-                        }
-                    }
-
-                    const resultEmbed = new EmbedBuilder()
-                        .setTitle(isDivine ? 'Jugement du dieu Capybara' : 'Résultat de la récolte')
-                        .setDescription((choice.consequence || '') + productionText)
-                        .addFields({ name: 'Gagné/perdu', value: `${finalDelta >= 0 ? '+' : ''}${finalDelta} 🍉`, inline: true }, { name: 'Total', value: `${after.watermelon_count} 🍉`, inline: true });
-
-                    // Disable buttons
-                    const disabledRow = new ActionRowBuilder().addComponents(
-                        new ButtonBuilder().setCustomId(aId).setLabel('Choix A').setStyle(ButtonStyle.Primary).setDisabled(true),
-                        new ButtonBuilder().setCustomId(bId).setLabel('Choix B').setStyle(ButtonStyle.Secondary).setDisabled(true)
-                    );
-                    await message.edit({ embeds: [embed], components: [disabledRow] });
-                    await i.followUp({ embeds: [resultEmbed] });
-                    collector.stop('done');
-                });
-
-                collector.on('end', async (collected, reason) => {
-                    if (reason !== 'done') {
-                        // no click
-                        try {
-                            watermelonCooldowns.set(key, Date.now()); // keep cooldown as used
-                            await interaction.followUp({ content: 'Temps écoulé — action abandonnée. Essaye plus tard.', ephemeral: true });
-                        } catch (e) {/* ignore */}
-                    }
-                });
-
-            } catch (err) {
-                console.error('Error in farm flow:', err);
-                watermelonCooldowns.delete(key);
-                // Use followUp if deferred, editReply if not yet replied
-                try {
-                    await interaction.editReply({ content: 'Erreur pendant la tentative de farm (erreur serveur).' });
-                } catch (e) {
-                    await interaction.followUp({ content: 'Erreur pendant la tentative de farm (erreur serveur).', ephemeral: true });
-                }
-            }
-    } else if (commandName === 'ping') {
-        await interaction.reply('pong');
-    } else if (commandName === 'eval' && interaction.member.id === '693374876815458346') {
-        const code = options.getString('code');
-        try {
-            const result = eval(code);
-            await interaction.reply({ content: `Résultat : ${result}` });
-        } catch (error) {
-            await interaction.reply({ content: `Erreur : ${error.message}` });
-        }
-    }
+    const context = {
+        db,
+        settings,
+        ai,
+        scenarioService,
+        watermelonCooldowns,
+        WATERMELON_COOLDOWN_MS
+    };
+    
+    await commandRegistry.handleInteraction(interaction, context);
 });
 
 client.on(Events.GuildMemberAdd, async (member) => {
@@ -556,7 +158,7 @@ async function chatGpt(message, variation) {
     async function main() {
         const control = {
             role: 'system',
-            content: 'Return ONLY a JSON object with keys: message (string), faith_change (int, optional and must be one of -1, 0, 1), update (boolean, optional), punish (boolean, optional). The "faith_change" must be either -1 (decrease by one), 0 (leave the level unchanged) or 1 (increase by one) — do NOT return any other numbers. The "punish" flag should ONLY be set to true in the most extreme cases where the person\'s soul is beyond redemption - severe blasphemy or repeated unforgivable acts. Use this sparingly and only when absolutely necessary. If you cannot return a valid JSON object, return plain JSON with keys message and update=false.'
+            content: 'Return ONLY a JSON object with keys: message (string), faith_change (int, optional and must be one of -1, 0, 1), update (boolean, optional), punish (boolean, optional). The "faith_change" must be either -1 (decrease by one), 0 (leave the level unchanged) or 1 (increase by one)  do NOT return any other numbers. The "punish" flag should ONLY be set to true in the most extreme cases where the person\'s soul is beyond redemption - severe blasphemy or repeated unforgivable acts. Use this sparingly and only when absolutely necessary. If you cannot return a valid JSON object, return plain JSON with keys message and update=false.'
         };
 
         const completion = await ai.sendChat([control, ...messageMemory], process.env.AI_MODEL || 'gpt-3.5-turbo');
@@ -564,36 +166,29 @@ async function chatGpt(message, variation) {
         const raw = completion.choices[0].message.content;
         let parsed = null;
         
-        // Nettoie le texte brut si le modèle a mis le JSON dans un bloc de code markdown
         let cleanedRaw = raw.trim();
         if (cleanedRaw.startsWith('```')) {
-            // Supprime les balises de code markdown (```json ou ``` au début/fin)
             cleanedRaw = cleanedRaw.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
         }
         
         try {
             parsed = JSON.parse(cleanedRaw);
         } catch (err) {
-            // Si le parsing échoue, utilise le texte brut comme message
             parsed = { message: cleanedRaw, faith_change: 0, update: false };
         }
 
-        // Envoie uniquement le message (jamais le JSON complet)
         const replyText = parsed.message || 'Erreur : aucun message reçu du divin Capybara.';
         await message.reply(replyText);
         
-        // Stocke le JSON brut dans la mémoire (pour que le modèle se souvienne de ses décisions)
         messageMemory.push({ role: `assistant`, content: `${raw}` });
 
-    // Only update DB if model explicitly requested an update and asked for +/-1 (0 means no change)
-    if (parsed.update && typeof parsed.faith_change !== 'undefined' && parsed.faith_change !== 0) {
+        if (parsed.update && typeof parsed.faith_change !== 'undefined' && parsed.faith_change !== 0) {
             try {
                 const cur = await db.getFaith(message.guild.id, message.author.id);
                 const last = new Date(cur?.updated_at || 0);
                 const now = new Date();
                 const minutes = parseInt(process.env.FAITH_UPDATE_COOLDOWN_MINUTES || '60', 10);
                 if ((now - last) / 60000 >= minutes) {
-                    // The DB addFaith will internally clamp to [-5, 20]
                     await db.addFaith(message.guild.id, message.author.id, parsed.faith_change);
                 }
             } catch (e) {

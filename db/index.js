@@ -106,6 +106,8 @@ async function getFaith(guildId, discordId) {
     faith_level: row.faith_level,
     label: LEVELS[row.faith_level],
     watermelon_count: row.watermelon_count || 0,
+    blessing_multiplier: row.blessing_multiplier || 1,
+    blessing_charges: row.blessing_charges || 0,
     updated_at: row.updated_at
   };
 }
@@ -149,7 +151,9 @@ async function getProduction(guildId, discordId) {
       terraformeur_fruito_spherique: 0,
       architecte_quantique_melon: 0,
       matrice_originelle_fruits: 0,
-      coeur_cosmique_watermelon: 0
+      coeur_cosmique_watermelon: 0,
+      blessing_multiplier: 1,
+      blessing_charges: 0
     };
   }
   const row = res[0];
@@ -165,7 +169,9 @@ async function getProduction(guildId, discordId) {
     terraformeur_fruito_spherique: row.terraformeur_fruito_spherique || 0,
     architecte_quantique_melon: row.architecte_quantique_melon || 0,
     matrice_originelle_fruits: row.matrice_originelle_fruits || 0,
-    coeur_cosmique_watermelon: row.coeur_cosmique_watermelon || 0
+    coeur_cosmique_watermelon: row.coeur_cosmique_watermelon || 0,
+    blessing_multiplier: row.blessing_multiplier || 1,
+    blessing_charges: row.blessing_charges || 0
   };
 }
 
@@ -258,6 +264,25 @@ async function applyProduction(guildId, discordId) {
   return resources;
 }
 
+async function grantBlessing(guildId, discordId, multiplier, charges) {
+  await ensureUser(guildId, discordId);
+  const safeMultiplier = Math.max(1, Math.min(5, parseFloat(multiplier) || 1));
+  const safeCharges = Math.max(0, Math.min(10, parseInt(charges, 10) || 0));
+  await query('UPDATE faith_users SET blessing_multiplier = ?, blessing_charges = ? WHERE guild_id = ? AND discord_id = ?', [safeMultiplier, safeCharges, guildId, discordId]);
+  return { blessing_multiplier: safeMultiplier, blessing_charges: safeCharges };
+}
+
+async function consumeBlessingCharge(guildId, discordId) {
+  await ensureUser(guildId, discordId);
+  const res = await query('SELECT blessing_multiplier, blessing_charges FROM faith_users WHERE guild_id = ? AND discord_id = ?', [guildId, discordId]);
+  if (res.length === 0) return { blessing_multiplier: 1, blessing_charges: 0 };
+  const currentMultiplier = res[0].blessing_multiplier || 1;
+  let charges = Math.max(0, (res[0].blessing_charges || 0) - 1);
+  const multiplier = charges > 0 ? currentMultiplier : 1;
+  await query('UPDATE faith_users SET blessing_multiplier = ?, blessing_charges = ? WHERE guild_id = ? AND discord_id = ?', [multiplier, charges, guildId, discordId]);
+  return { blessing_multiplier: multiplier, blessing_charges: charges };
+}
+
 async function setFaith(guildId, discordId, newFaith) {
   // clamp
   if (newFaith > 20) newFaith = 20;
@@ -344,5 +369,7 @@ module.exports = {
   updateResource,
   buyResource,
   applyProduction,
+  grantBlessing,
+  consumeBlessingCharge,
   LEVELS,
 };
