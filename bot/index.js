@@ -62,9 +62,17 @@ for (let i = -5; i <= 20; i++) {
 
 const promptSystem = Array.isArray(settings.promptSystem) ? settings.promptSystem.join('\n') : settings.promptSystem;
 
-const messageMemory = [
-    { role: 'system', content: promptSystem },
-];
+// Mémoire de conversation par utilisateur
+const messageMemories = new Map();
+
+function getMemoryForUser(userId) {
+    if (!messageMemories.has(userId)) {
+        messageMemories.set(userId, [
+            { role: 'system', content: promptSystem }
+        ]);
+    }
+    return messageMemories.get(userId);
+}
 
 const scenarioService = createScenarioService(ai, settings);
 
@@ -144,6 +152,8 @@ client.on(Events.GuildMemberAdd, async (member) => {
 
 async function chatGpt(message, variation) {
     message.channel.sendTyping();
+
+    const messageMemory = getMemoryForUser(message.author.id);
 
     messageMemory.push({
         role: `user`,

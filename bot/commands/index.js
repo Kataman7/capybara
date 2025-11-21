@@ -4,6 +4,9 @@ const FarmCommand = require('./farm');
 const LeaderboardCommand = require('./leaderboard');
 const BuyCommand = require('./buy');
 const ItemsCommand = require('./items');
+const AccuserCommand = require('./accuser');
+const DefendreCommand = require('./defendre');
+const ProcesCommand = require('./proces');
 
 const commands = [
     EvalCommand,
@@ -11,7 +14,10 @@ const commands = [
     FarmCommand,
     LeaderboardCommand,
     BuyCommand,
-    ItemsCommand
+    ItemsCommand,
+    AccuserCommand,
+    DefendreCommand,
+    ProcesCommand
 ];
 
 const commandMap = new Map(commands.map(cmd => [cmd.data.name, cmd]));

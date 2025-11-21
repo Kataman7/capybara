@@ -23,10 +23,9 @@ module.exports = {
             for (const level of PRODUCTION_CHAIN) {
                 const count = resources[level.id] || 0;
                 if (count > 0 || level.id === 'watermelon_count') {
-                    const costText = level.cost ? `Coût: ${level.cost.amount} ${resourcesLabel(level.cost.resource)}` : 'Ressource de base';
                     fields.push({
                         name: `${level.emoji} ${level.name}`,
-                        value: `${count}\n${costText}`,
+                        value: `${count}`,
                         inline: true
                     });
                 }
