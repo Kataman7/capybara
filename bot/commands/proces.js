@@ -32,17 +32,28 @@ module.exports = {
 
         await interaction.deferReply();
 
+        // Récupérer les données écologiques des deux parties
+        const accuserData = await db.getFaith(interaction.guild.id, targetTrial.accuser) || { ecology_points: 0, faith_level: 0 };
+        const accusedData = await db.getFaith(interaction.guild.id, accusedId) || { ecology_points: 0, faith_level: 0 };
+
         // Préparer le prompt pour l'IA
         const trialPrompt = `Tu es le dieu Capybara, juge suprême et équitable. Un procès se déroule devant toi.
 
 ACCUSATEUR : <@${targetTrial.accuser}>
+- Points d'écologie : ${accuserData.ecology_points}
+- Niveau de foi : ${accuserData.faith_level}
+
 ACCUSÉ : <@${accusedId}>
+- Points d'écologie : ${accusedData.ecology_points}
+- Niveau de foi : ${accusedData.faith_level}
 
 CRIME ALLÉGUÉ :
 "${targetTrial.crime}"
 
 DÉFENSE DE L'ACCUSÉ :
 "${targetTrial.defense}"
+
+Prends en compte les points d'écologie et la foi de chacun pour juger leur crédibilité et leur respect de la nature.
 
 Tu dois juger ce procès avec sagesse. Analyse les arguments et détermine le verdict.
 

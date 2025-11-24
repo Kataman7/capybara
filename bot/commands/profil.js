@@ -9,31 +9,33 @@ module.exports = {
     async execute(interaction, { db }) {
         const user = interaction.user;
         try {
-            const faithData = await db.getFaith(interaction.guild.id, user.id) || { faith_level: 0, label: db.LEVELS['0'] };
+            const faithData = await db.getFaith(interaction.guild.id, user.id) || { faith_level: 0, label: db.LEVELS['0'], ecology_points: 0 };
             const resources = await db.getProduction(interaction.guild.id, user.id);
+            const totalScore = db.calculateProductionScore(resources);
 
-            const fields = [
-                {
-                    name: '⭐ Foi',
-                    value: `**${faithData.label}**\nPalier: \`${faithData.faith_level}\``,
-                    inline: false
-                }
-            ];
-
+            // Séparer les ressources par catégorie
+            const productionItems = [];
             for (const level of PRODUCTION_CHAIN) {
                 const count = resources[level.id] || 0;
-                if (count > 0 || level.id === 'watermelon_count') {
-                    fields.push({
-                        name: `${level.emoji} ${level.name}`,
-                        value: `${count}`,
-                        inline: true
-                    });
+                if (count > 0) {
+                    productionItems.push(`${level.emoji} **${level.name}**: ${count}`);
                 }
             }
 
             const embed = new EmbedBuilder()
                 .setTitle(`📊 Profil de ${user.username}`)
-                .addFields(fields)
+                .addFields(
+                    {
+                        name: '⭐ Statistiques',
+                        value: `**:pray: Foi**: ${faithData.label} (${faithData.faith_level})\n**:seedling: Écologie**: ${faithData.ecology_points} pts\n**📈 Score total**: ${formatNumber(totalScore)} pts`,
+                        inline: false
+                    },
+                    {
+                        name: '🏭 Production',
+                        value: productionItems.length > 0 ? productionItems.join('\n') : 'Aucune production',
+                        inline: false
+                    }
+                )
                 .setColor(0x00D4FF);
 
             await interaction.reply({ embeds: [embed] });
@@ -44,8 +46,6 @@ module.exports = {
     }
 };
 
-function resourcesLabel(resourceId) {
-    const level = PRODUCTION_CHAIN.find(l => l.id === resourceId);
-    if (!level) return resourceId;
-    return `${level.emoji}`;
+function formatNumber(num) {
+    return new Intl.NumberFormat('fr-FR').format(num || 0);
 }

@@ -108,6 +108,7 @@ async function getFaith(guildId, discordId) {
     watermelon_count: row.watermelon_count || 0,
     blessing_multiplier: row.blessing_multiplier || 1,
     blessing_charges: row.blessing_charges || 0,
+    ecology_points: row.ecology_points || 0,
     updated_at: row.updated_at
   };
 }
@@ -171,7 +172,8 @@ async function getProduction(guildId, discordId) {
     matrice_originelle_fruits: row.matrice_originelle_fruits || 0,
     coeur_cosmique_watermelon: row.coeur_cosmique_watermelon || 0,
     blessing_multiplier: row.blessing_multiplier || 1,
-    blessing_charges: row.blessing_charges || 0
+    blessing_charges: row.blessing_charges || 0,
+    ecology_points: row.ecology_points || 0
   };
 }
 
@@ -206,27 +208,19 @@ async function buyResource(guildId, discordId, resourceId, costResourceId, costA
 async function applyProduction(guildId, discordId) {
   await ensureUser(guildId, discordId);
   const resources = await getProduction(guildId, discordId);
+  const { getProducers } = require('../productionChain');
   
-  // Production chain (from highest to lowest, excluding watermelon_count)
-  const productionOrder = [
-    { producer: 'coeur_cosmique_watermelon', produces: 'matrice_originelle_fruits' },
-    { producer: 'matrice_originelle_fruits', produces: 'architecte_quantique_melon' },
-    { producer: 'architecte_quantique_melon', produces: 'terraformeur_fruito_spherique' },
-    { producer: 'terraformeur_fruito_spherique', produces: 'megastructure_melonospherique' },
-    { producer: 'megastructure_melonospherique', produces: 'complexe_agricolo_energetique' },
-    { producer: 'complexe_agricolo_energetique', produces: 'usine_hydro_melonique' },
-    { producer: 'usine_hydro_melonique', produces: 'serre_auto_multipliee' },
-    { producer: 'serre_auto_multipliee', produces: 'multiplicateur_agricolyte' },
-    { producer: 'multiplicateur_agricolyte', produces: 'jardin_melonifique' },
-    { producer: 'jardin_melonifique', produces: 'presse_melon' },
-    { producer: 'presse_melon', produces: 'watermelon_count' }
-  ];
+  // Get blessing multiplier
+  const blessingMultiplier = parseFloat(resources.blessing_multiplier) || 1;
   
-  // Apply production in cascade
-  for (const { producer, produces } of productionOrder) {
-    const producerCount = resources[producer] || 0;
+  // Apply production in cascade (from highest to lowest)
+  const producers = getProducers().reverse();
+  for (const level of producers) {
+    const producerCount = resources[level.id] || 0;
     if (producerCount > 0) {
-      resources[produces] = (resources[produces] || 0) + producerCount;
+      const baseProduction = producerCount * level.produces.amount;
+      const finalProduction = Math.round(baseProduction * blessingMultiplier);
+      resources[level.produces.resource] = (resources[level.produces.resource] || 0) + finalProduction;
     }
   }
   
@@ -302,6 +296,15 @@ async function addFaith(guildId, discordId, delta) {
   return getFaith(guildId, discordId);
 }
 
+async function addEcologyPoints(guildId, discordId, delta) {
+  await ensureUser(guildId, discordId);
+  delta = parseInt(delta, 10) || 0;
+  // Clamp delta between -10 and +10
+  const clamped = Math.max(-10, Math.min(10, delta));
+  await query('UPDATE faith_users SET ecology_points = ecology_points + ? WHERE guild_id = ? AND discord_id = ?', [clamped, guildId, discordId]);
+  return getFaith(guildId, discordId);
+}
+
 // Calculate total production score (convert everything to watermelon equivalent)
 function calculateProductionScore(resources) {
   const { PRODUCTION_CHAIN } = require('../productionChain');
@@ -361,6 +364,7 @@ module.exports = {
   getFaith,
   setFaith,
   addFaith,
+  addEcologyPoints,
   getWatermelon,
   addWatermelon,
   getWatermelonLeaderboard,
@@ -371,5 +375,6 @@ module.exports = {
   applyProduction,
   grantBlessing,
   consumeBlessingCharge,
+  calculateProductionScore,
   LEVELS,
 };

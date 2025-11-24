@@ -41,6 +41,7 @@ function sanitizeScenario(raw) {
         text: (choice?.text || '???').toString(),
         consequence: (choice?.consequence || '???').toString(),
         base_delta: clampDelta(choice?.base_delta),
+        ecology_delta: clampDelta(choice?.ecology_delta),
         blessing: sanitizeBlessing(choice?.blessing)
     }));
 

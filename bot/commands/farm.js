@@ -14,6 +14,10 @@ const clampDelta = (value) => {
     return parsed;
 };
 
+const formatNumber = (num) => {
+    return new Intl.NumberFormat('fr-FR').format(num || 0);
+};
+
 const createShuffledChoices = (choices = []) => {
     const jitterRange = 2; // keep outcomes close while hiding the obviously "best" option
     return choices
@@ -25,6 +29,7 @@ const createShuffledChoices = (choices = []) => {
                 consequence: (choice?.consequence || 'Conséquence inconnue').toString(),
                 base_delta: base,
                 effective_delta: clampDelta(base + jitter),
+                ecology_delta: parseInt(choice?.ecology_delta ?? 0, 10) || 0,
                 displayIndex: idx,
                 blessing: choice?.blessing || null
             };
@@ -105,20 +110,36 @@ module.exports = {
 
                 finalDelta = clampDelta(finalDelta);
 
+                let productionText = '';
                 let blessingText = '';
-                if (finalDelta > 0 && activeBlessingCharges > 0 && activeBlessingMultiplier > 1) {
-                    finalDelta = clampDelta(Math.round(finalDelta * activeBlessingMultiplier));
-                    const updatedBlessing = await db.consumeBlessingCharge(interaction.guild.id, interaction.user.id);
-                    blessingText = `\n✨ Bénédiction active x${activeBlessingMultiplier.toFixed(2)} (${updatedBlessing.blessing_charges} utilisation(s) restante(s))`;
-                }
-
+                let scoreGained = 0;
+                
+                // Calculer le score AVANT toute modification
+                const productionBefore = await db.getProduction(interaction.guild.id, interaction.user.id);
+                const scoreBefore = db.calculateProductionScore(productionBefore);
+                
+                // Ajouter les watermelons du farm
                 const after = await db.addWatermelon(interaction.guild.id, interaction.user.id, finalDelta);
 
-                let productionText = '';
+                // Appliquer le delta écologique
+                let ecologyText = '';
+                if (choice.ecology_delta !== 0) {
+                    const updatedFaith = await db.addEcologyPoints(interaction.guild.id, interaction.user.id, choice.ecology_delta);
+                    const ecoIcon = choice.ecology_delta > 0 ? '🌱' : '🏭';
+                    ecologyText = `\n${ecoIcon} **Écologie ** : ${updatedFaith.ecology_points} pts`;
+                }
+
                 if (finalDelta > 0) {
-                    const productionBefore = await db.getProduction(interaction.guild.id, interaction.user.id);
+                    // Appliquer la production
                     await db.applyProduction(interaction.guild.id, interaction.user.id);
                     const productionAfter = await db.getProduction(interaction.guild.id, interaction.user.id);
+                    const scoreAfter = db.calculateProductionScore(productionAfter);
+                    scoreGained = scoreAfter - scoreBefore;
+
+                    // Afficher le multiplicateur actif
+                    if (activeBlessingCharges > 0 && activeBlessingMultiplier > 1) {
+                        blessingText = `\n✨ **Bénédiction active x${activeBlessingMultiplier.toFixed(2)}** (${activeBlessingCharges} utilisation(s) restante(s))`;
+                    }
 
                     const productionChanges = [];
                     for (const level of getProducers()) {
@@ -131,8 +152,11 @@ module.exports = {
                     }
 
                     if (productionChanges.length > 0) {
-                        productionText = '\n\n**🏭 Production appliquée:**\n' + productionChanges.join('\n');
+                        productionText = '\n\n**🏭 Production appliquée:**' + blessingText + '\n' + productionChanges.join('\n');
                     }
+                } else if (finalDelta < 0) {
+                    // Perte : le score gagné est négatif
+                    scoreGained = finalDelta;
                 }
 
                 let grantedBlessingText = '';
@@ -148,10 +172,10 @@ module.exports = {
 
                 const resultEmbed = new EmbedBuilder()
                     .setTitle(scenario.type.resultTitle)
-                    .setDescription((choice.consequence || '') + productionText + blessingText + grantedBlessingText)
+                    .setDescription((choice.consequence || '') + ecologyText + productionText + grantedBlessingText)
                     .addFields(
                         { name: 'Gagné/perdu', value: `${finalDelta >= 0 ? '+' : ''}${finalDelta} 🍉`, inline: true },
-                        { name: 'Total', value: `${after.watermelon_count} 🍉`, inline: true }
+                        { name: 'Score gagné', value: `${scoreGained >= 0 ? '+' : ''}${formatNumber(scoreGained)} pts`, inline: true }
                     );
 
                 const disabledRow = new ActionRowBuilder().addComponents(
