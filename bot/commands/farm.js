@@ -37,6 +37,9 @@ const createShuffledChoices = (choices = []) => {
         .sort(() => Math.random() - 0.5);
 };
 
+// Cooldowns temporaires (pendant le choix) et définitifs (après le choix)
+const pendingFarms = new Map(); // Mini-cooldown pendant qu'on attend la réponse
+
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('farm')
@@ -45,6 +48,8 @@ module.exports = {
     async execute(interaction, context) {
         const { db, scenarioService, watermelonCooldowns, WATERMELON_COOLDOWN_MS } = context;
         const key = `${interaction.guild.id}:${interaction.user.id}`;
+        
+        // Vérifier le vrai cooldown (après un choix fait)
         const last = watermelonCooldowns.get(key);
         const now = Date.now();
         if (last && (now - last) < WATERMELON_COOLDOWN_MS) {
@@ -53,8 +58,15 @@ module.exports = {
             return interaction.reply({ content: `Tu dois attendre encore ${mins} minutes avant de farmer à nouveau.`, ephemeral: true });
         }
 
+        // Vérifier si un farm est déjà en cours (mini-cooldown)
+        if (pendingFarms.has(key)) {
+            return interaction.reply({ content: 'Tu as déjà un farm en cours ! Réponds d\'abord au choix précédent.', ephemeral: true });
+        }
+
         await interaction.deferReply();
-        watermelonCooldowns.set(key, now);
+        
+        // Marquer qu'un farm est en cours
+        pendingFarms.set(key, now);
 
         try {
             const scenario = await scenarioService.generateScenario();
@@ -185,13 +197,22 @@ module.exports = {
 
                 await message.edit({ embeds: [embed], components: [disabledRow] });
                 await componentInteraction.followUp({ embeds: [resultEmbed] });
+                
+                // Appliquer le vrai cooldown maintenant qu'un choix a été fait
+                watermelonCooldowns.set(key, Date.now());
+                pendingFarms.delete(key);
+                
                 collector.stop('done');
             });
 
             collector.on('end', async (_collected, reason) => {
+                // Toujours supprimer le pending farm
+                pendingFarms.delete(key);
+                
                 if (reason !== 'done') {
+                    // Pas de cooldown si timeout - le joueur n'a pas fait de choix
                     try {
-                        await interaction.followUp({ content: 'Temps écoulé — action abandonnée. Essaye plus tard.', ephemeral: true });
+                        await interaction.followUp({ content: 'Temps écoulé — action abandonnée. Tu peux réessayer !', ephemeral: true });
                     } catch (err) {
                         console.error('Failed to send timeout notice:', err.message);
                     }
@@ -199,7 +220,7 @@ module.exports = {
             });
         } catch (err) {
             console.error('Error in farm flow:', err);
-            watermelonCooldowns.delete(key);
+            pendingFarms.delete(key);
             try {
                 await interaction.editReply({ content: 'Erreur pendant la tentative de farm (erreur serveur).' });
             } catch (_err) {

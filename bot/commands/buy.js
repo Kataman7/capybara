@@ -10,35 +10,45 @@ module.exports = {
         try {
             await interaction.deferReply();
 
-            const resources = await db.getProduction(interaction.guild.id, interaction.user.id) || {};
-            const purchases = [];
+            let totalPurchases = [];
+            let keepBuying = true;
 
-            for (let i = PRODUCTION_CHAIN.length - 1; i >= 0; i--) {
-                const level = PRODUCTION_CHAIN[i];
-                if (!level.cost) continue;
+            // Boucle pour acheter en cascade jusqu'à ce qu'on ne puisse plus rien acheter
+            while (keepBuying) {
+                keepBuying = false;
+                
+                for (let i = PRODUCTION_CHAIN.length - 1; i >= 0; i--) {
+                    const level = PRODUCTION_CHAIN[i];
+                    if (!level.cost) continue;
 
-                const result = await db.buyResource(
-                    interaction.guild.id,
-                    interaction.user.id,
-                    level.id,
-                    level.cost.resource,
-                    level.cost.amount
-                );
+                    const result = await db.buyResource(
+                        interaction.guild.id,
+                        interaction.user.id,
+                        level.id,
+                        level.cost.resource,
+                        level.cost.amount
+                    );
 
-                if (result.bought > 0) {
-                    purchases.push(`${level.emoji} **${level.name}** x${result.bought}`);
+                    if (result.bought > 0) {
+                        // Chercher si on a déjà acheté ce niveau
+                        const existingPurchase = totalPurchases.find(p => p.level === level.id);
+                        if (existingPurchase) {
+                            existingPurchase.count += result.bought;
+                        } else {
+                            totalPurchases.push({ level: level.id, emoji: level.emoji, name: level.name, count: result.bought });
+                        }
+                        keepBuying = true; // On a acheté quelque chose, on refait un tour
+                    }
                 }
-
-                resources[level.id] = (resources[level.id] || 0) + result.bought;
-                resources[level.cost.resource] = result.remaining;
             }
 
-            if (purchases.length === 0) {
+            if (totalPurchases.length === 0) {
                 await interaction.editReply('❌ Aucun achat possible. Tu n\'as pas assez de ressources !');
             } else {
+                const purchaseLines = totalPurchases.map(p => `${p.emoji} **${p.name}** x${p.count}`);
                 const embed = new EmbedBuilder()
                     .setTitle('✅ Achats effectués !')
-                    .setDescription(purchases.join('\n'))
+                    .setDescription(purchaseLines.join('\n'))
                     .setColor(0x00FF00);
                 await interaction.editReply({ embeds: [embed] });
             }
