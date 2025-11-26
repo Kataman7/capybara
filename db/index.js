@@ -119,13 +119,18 @@ async function getWatermelon(guildId, discordId) {
   return { watermelon_count: res[0].watermelon_count };
 }
 
-async function addWatermelon(guildId, discordId, delta) {
+async function addWatermelon(guildId, discordId, delta, force = false) {
   await ensureUser(guildId, discordId);
   delta = parseInt(delta, 10) || 0;
-  // clamp delta magnitude so we don't allow huge swings
-  const clamped = Math.max(-15, Math.min(15, delta));
+  
+  let valueToAdd = delta;
+  if (!force) {
+      // clamp delta magnitude so we don't allow huge swings
+      valueToAdd = Math.max(-15, Math.min(15, delta));
+  }
+
   // Update and ensure non-negative total
-  await query('UPDATE faith_users SET watermelon_count = GREATEST(0, watermelon_count + ?) WHERE guild_id = ? AND discord_id = ?', [clamped, guildId, discordId]);
+  await query('UPDATE faith_users SET watermelon_count = GREATEST(0, watermelon_count + ?) WHERE guild_id = ? AND discord_id = ?', [valueToAdd, guildId, discordId]);
   return getWatermelon(guildId, discordId);
 }
 
@@ -358,6 +363,26 @@ async function getProductionLeaderboard(guildId, limit = 10) {
   return scored.slice(0, safeLimit);
 }
 
+// Trade / Investment methods
+async function createInvestment(guildId, discordId, amount, price) {
+  await ensureUser(guildId, discordId);
+  await query(
+    'INSERT INTO trade_investments (guild_id, discord_id, invested_amount, entry_price) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE invested_amount = ?, entry_price = ?, investment_date = CURRENT_TIMESTAMP',
+    [guildId, discordId, amount, price, amount, price]
+  );
+  return getInvestment(guildId, discordId);
+}
+
+async function getInvestment(guildId, discordId) {
+  const res = await query('SELECT * FROM trade_investments WHERE guild_id = ? AND discord_id = ?', [guildId, discordId]);
+  if (res.length === 0) return null;
+  return res[0];
+}
+
+async function removeInvestment(guildId, discordId) {
+  await query('DELETE FROM trade_investments WHERE guild_id = ? AND discord_id = ?', [guildId, discordId]);
+}
+
 module.exports = {
   query,
   ensureUser,
@@ -376,5 +401,8 @@ module.exports = {
   grantBlessing,
   consumeBlessingCharge,
   calculateProductionScore,
+  createInvestment,
+  getInvestment,
+  removeInvestment,
   LEVELS,
 };

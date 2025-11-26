@@ -8,6 +8,7 @@ const AccuserCommand = require('./accuser');
 const DefendreCommand = require('./defendre');
 const ProcesCommand = require('./proces');
 const SlotCommand = require('./slot');
+const TradeCommand = require('./trade');
 
 const commands = [
     EvalCommand,
@@ -19,7 +20,8 @@ const commands = [
     AccuserCommand,
     DefendreCommand,
     ProcesCommand,
-    SlotCommand
+    SlotCommand,
+    TradeCommand
 ];
 
 const commandMap = new Map(commands.map(cmd => [cmd.data.name, cmd]));

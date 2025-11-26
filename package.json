@@ -4,6 +4,7 @@
     "moment": "^2.30.1",
     "mysql2": "^3.4.0",
     "openai": "^4.20.1",
+    "coingecko-api": "^1.0.10",
     "dotenv": "^16.0.3"
   },
   "devDependencies": {
