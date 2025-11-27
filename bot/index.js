@@ -92,7 +92,8 @@ client.on(Events.MessageCreate, async (message) => {
     if (message.content.includes('<@959427012194349088>')) {
         chatService.handleMessage(message, `${message.member.nickname} s'adresse à toi :`);
     } else if (Math.random() >= 0.982) {
-        chatService.handleMessage(message, ` tu interceptes un message de ${message.member.nickname}, mais il ne s'adressai pas à toi, il est donc sorti de son contexte`);
+        // Adoucir le ton pour les messages interceptés
+        chatService.handleMessage(message, `${message.member.nickname} parle dans le sanctuaire, mais ne s'adresse pas directement au Capybara Divin. Réponds de façon neutre, bienveillante ou indifférente, sans punition ni colère. Ce n'est pas une provocation.`);
     } else if (message.reference) {
         try {
             const referencedMessage = await message.fetchReference();
