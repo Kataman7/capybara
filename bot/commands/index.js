@@ -10,6 +10,7 @@ const ProcesCommand = require('./proces');
 const SlotCommand = require('./slot');
 const TradeCommand = require('./trade');
 const VersionCommand = require('./version');
+const InvocationCommand = require('./invocation');
 
 const commands = [
     EvalCommand,
@@ -22,8 +23,9 @@ const commands = [
     DefendreCommand,
     ProcesCommand,
     SlotCommand,
-    TradeCommand
-    ,VersionCommand
+    TradeCommand,
+    VersionCommand,
+    InvocationCommand
 ];
 
 const commandMap = new Map(commands.map(cmd => [cmd.data.name, cmd]));
