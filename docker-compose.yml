@@ -1,6 +1,11 @@
 services:
   capybara:
-    build: .
+    build:
+      context: .
+      args:
+        # Set GIT_COMMIT and GIT_BRANCH when building to populate the COMMIT/BRANCH files inside the image
+        GIT_COMMIT: ${GIT_COMMIT:-unknown}
+        GIT_BRANCH: ${GIT_BRANCH:-unknown}
     container_name: capybara_bot
     env_file:
       - .env

@@ -47,6 +47,33 @@ npm run dev
 - **settings.example.json**: Template for settings
 - **db/migrations/init.sql**: MySQL schema
 
+### Providing build commit info / Git usage
+`/version` reads version information primarily from the local Git repository using `git describe`, `git rev-parse`, and `git log`.
+
+If `.git` is not available at runtime (common in CI/CD or trimmed images), prefer adding a small `COMMIT` file at build time with the short commit hash. This is more robust than setting a runtime env var and avoids leaking other envs.
+
+Example Docker build (writes `COMMIT` and `BRANCH` into the image):
+```bash
+docker build --build-arg GIT_COMMIT=$(git rev-parse --short HEAD) -t capybara:latest .
+```
+Dockerfile:
+```Dockerfile
+ARG GIT_COMMIT
+ARG GIT_BRANCH
+ENV COMMIT_HASH=${GIT_COMMIT}
+ENV BRANCH_NAME=${GIT_BRANCH}
+RUN echo ${COMMIT_HASH} > /usr/src/app/COMMIT && echo ${BRANCH_NAME} > /usr/src/app/BRANCH
+```
+
+Then `/version` will use the `COMMIT` and `BRANCH` files to display the build commit and branch when `.git` is not present. Otherwise, keep `.git` accessible at runtime (or mount it) so `/version` can show the branch, tag/description, commit hash and commit details accurately.
+
+Important note for development with Docker Compose:
+If you use `docker-compose` with a host volume mount (for example `./:/usr/src/app`), the host overlay will hide the `COMMIT` file that was written during image build and will also mask `.git`. In that case `/version` will revert to using `git` if `.git` is mounted, or fall back to `package.json` if not.
+
+Suggested workflow:
+- For production images: build the image with `GIT_COMMIT` build-arg and run without mounting the source tree.
+- For development: mount your `.git` into the container if you want `/version` to use Git, or rely on your local `git` when running the bot locally (outside of Docker).
+
 ## Commands
 - `/farm` : Lance une récolte de pastèques et une épreuve divine générée par l'IA.
 - `/buy` : Achète des upgrades ou ressources pour améliorer votre production.
@@ -56,6 +83,8 @@ npm run dev
 - `/bless` : Reçoit ou utilise une bénédiction divine.
 - `/items` : Liste vos objets et upgrades disponibles.
 - `/accuser`, `/defendre`, `/proces`, `/slot`, `/eval` : Commandes spéciales pour des interactions, mini-jeux ou modération.
+- `/accuser`, `/defendre`, `/proces`, `/slot`, `/eval` : Commandes spéciales pour des interactions, mini-jeux ou modération.
+- `/version` : Affiche la version du bot (hash court du commit Git ou info de build), utile pour prouver que le code public est le même que le code exécuté.
 
 Chaque commande peut déclencher des réactions de l'IA capybara, qui juge, récompense ou punit selon vos choix et votre comportement.
 
