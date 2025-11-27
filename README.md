@@ -1,31 +1,75 @@
-https://kataman7.github.io/portfolio/
+# Capybara Discord Bot
 
-ENV configuration notes:
-- `PROMPT_SYSTEM`: Put the AI system prompt here (use \n to add line breaks). If omitted, the bot will use a default prompt.
- - `PROMPT_SYSTEM`: (Deprecated) The system now prefers the `settings.json` file. Move your prompt to `settings.json` under `promptSystem`.
- - `punishRoleId` and `punishMessages` should be defined inside `settings.json` (see `settings.example.json`). The bot will not fallback to any env-based defaults.
- - `PROMPT_SYSTEM_FILE`: Deprecated — the bot now requires `promptSystem` to be in `settings.json`. If you previously used `PROMPT_SYSTEM_FILE`, move the prompt into `settings.json` instead.
+A modular, Docker-ready Discord bot for running faith-based, ecological, and crypto-themed games in your server. Powered by AI (Deepseek/OpenAI), MySQL, and Discord.js.
 
-Settings JSON:
-- You can store bot messages and non-sensitive configuration in a JSON file instead of editing `.env`. Use `SETTINGS_FILE` in `.env` to point to a file (e.g. `./settings.json`).
-- An example (`settings.example.json`) is included. The fields include:
-	- `promptSystem`: either a string or an array of lines that will be joined with newlines.
-	- `guildConfigs`: mapping of guild ids to welcome message and default role.
-	- `punishMessages`: array of strings, one is randomly chosen when `punish` is triggered by the model.
-	- `punishRoleId`: role id to assign when punish is requested.
-	- `faith.levels`: optional map for faith level labels.
+## Concept
+Capybara Bot est un jeu Discord de farm et d'économie où les joueurs doivent satisfaire une IA (LLM) qui se prend pour un dieu capybara. Pour progresser, il faut cultiver des ressources (pastèques, etc.), répondre à des épreuves divines, investir, et gérer son foi et son écologie. L'IA juge vos actions, distribue des bénédictions ou des punitions, et propose des scénarios interactifs. Le but est de monter dans les classements, accumuler des richesses, et rester dans les bonnes grâces du dieu capybara.
 
-Set `SETTINGS_FILE` to the path of your JSON file (e.g. `./settings.json`). The bot now requires the following fields in that file:
- - `promptSystem` (string or array of lines) — the AI system prompt
- - `punishMessages` (array of strings) — messages used when model returns `punish: true` (mandatory)
- - `guildConfigs` (optional) — per-guild welcome messages and roles
- - `faith.levels` (optional) — to override faith level labels
- - `faith.levels` (REQUIRED) — a mapping of level keys -5..20 to string labels. This file is now required; the bot will exit if it is missing or incomplete.
-	- `AI_API_KEY`: Canonical API key used by the provider (OpenAI or third-party like Deepseek). We recommend setting this.
-	 - Old variable `OPENAI_API_KEY` is no longer supported; if you previously used it, move the value to `AI_API_KEY`.
- - `AI_API_BASE_URL`: Base URL for the API provider (ex: https://api.deepseek.com). If left empty the official OpenAI host is used.
+## Features
+- **Farm & Économie** : Cultivez des pastèques, achetez des upgrades, gérez vos ressources.
+- **Épreuves divines** : L'IA génère des scénarios, dilemmes et punitions selon vos choix.
+- **Classements** : Comparez votre foi, écologie et richesse avec les autres joueurs.
+- **Trading crypto** : Investissez virtuellement dans des cryptos et suivez vos performances.
+- **Bénédictions & Punitions** : Recevez des boosts ou des malus selon votre comportement.
+- **Configurable** : Personnalisez prompts, rôles et messages dans `settings.json`.
+- **Déploiement facile** : Docker, Compose, et Adminer pour la gestion.
 
-Watermelon minigame:
-- Use `/watermelon view [user]` to see your or another user's melon count.
-- Use `/watermelon leaderboard` to view top 10 farmers.
-- Use `/watermelon farm` to attempt a harvest (3 hour cooldown). The bot will call the AI to generate a scenario and present two choices; choose by clicking a button. Your faith level influences the chance of a positive outcome. The bot will update your watermelon count accordingly.
+## Quickstart
+
+### 1. Clone & Install
+```bash
+# Clone the repo
+git clone https://github.com/Kataman7/capybara.git
+cd capybara
+
+# Copy and edit your environment config
+cp .env.example .env
+# Edit .env and settings.json with your Discord token, DB credentials, and AI keys
+```
+
+### 2. Run with Docker Compose
+```bash
+docker-compose up --build
+```
+- Bot runs in `capybara` container
+- MySQL DB in `capybara_db` container
+- Adminer UI at [localhost:8182](http://localhost:8182)
+
+### 3. Local Development
+```bash
+npm install
+npm run dev
+```
+
+## Configuration
+- **.env**: Secrets and runtime config (never commit real .env; use .env.example)
+- **settings.json**: Prompts, roles, messages, faith levels, scenario templates
+- **settings.example.json**: Template for settings
+- **db/migrations/init.sql**: MySQL schema
+
+## Commands
+- `/farm` : Lance une récolte de pastèques et une épreuve divine générée par l'IA.
+- `/buy` : Achète des upgrades ou ressources pour améliorer votre production.
+- `/profil` : Affiche votre profil, niveau de foi, écologie, et inventaire.
+- `/leaderboard` : Classement des joueurs selon la foi, l'écologie ou la richesse.
+- `/trade` : Investit virtuellement dans une crypto et affiche vos performances.
+- `/bless` : Reçoit ou utilise une bénédiction divine.
+- `/items` : Liste vos objets et upgrades disponibles.
+- `/accuser`, `/defendre`, `/proces`, `/slot`, `/eval` : Commandes spéciales pour des interactions, mini-jeux ou modération.
+
+Chaque commande peut déclencher des réactions de l'IA capybara, qui juge, récompense ou punit selon vos choix et votre comportement.
+
+## Code Structure
+- `bot/` — Discord bot logic
+  - `index.js` — Entry point
+  - `services/` — AI, chat, scenario, trial services
+  - `commands/` — Command handlers
+- `db/` — Database layer
+  - `core.js` — Connection pool
+  - `repositories/` — Domain logic (users, resources, trade, blessings)
+  - `migrations/` — SQL schema
+- `settings.json` — Bot config
+- `Dockerfile`, `docker-compose.yml` — Deployment
+
+## License
+Business Source License (BUSL). See LICENSE file for details and usage restrictions.

@@ -14,6 +14,7 @@ const ai = require('./services/aiClient');
 const db = require('../db');
 const commandRegistry = require('./commands');
 const createScenarioService = require('./services/scenarioService');
+const ChatService = require('./services/chatService');
 
 const watermelonCooldowns = new Map();
 const WATERMELON_COOLDOWN_MS = (parseInt(process.env.WATERMELON_COOLDOWN_HOURS || '3', 10) * 60 * 60 * 1000);
@@ -60,21 +61,8 @@ for (let i = -5; i <= 20; i++) {
     }
 }
 
-const promptSystem = Array.isArray(settings.promptSystem) ? settings.promptSystem.join('\n') : settings.promptSystem;
-
-// Mémoire de conversation par utilisateur
-const messageMemories = new Map();
-
-function getMemoryForUser(userId) {
-    if (!messageMemories.has(userId)) {
-        messageMemories.set(userId, [
-            { role: 'system', content: promptSystem }
-        ]);
-    }
-    return messageMemories.get(userId);
-}
-
 const scenarioService = createScenarioService(ai, settings);
+const chatService = new ChatService(ai, db, settings);
 
 client.login(token);
 
@@ -102,13 +90,13 @@ client.on(Events.MessageCreate, async (message) => {
     if (message.guild.id !== '960831251126824980') return;
 
     if (message.content.includes('<@959427012194349088>')) {
-        chatGpt(message, `${message.member.nickname} s'adresse à toi :`);
+        chatService.handleMessage(message, `${message.member.nickname} s'adresse à toi :`);
     } else if (Math.random() >= 0.982) {
-        chatGpt(message, ` tu interceptes un message de ${message.member.nickname}, mais il ne s'adressai pas à toi, il est donc sorti de son contexte`);
+        chatService.handleMessage(message, ` tu interceptes un message de ${message.member.nickname}, mais il ne s'adressai pas à toi, il est donc sorti de son contexte`);
     } else if (message.reference) {
         try {
             const referencedMessage = await message.fetchReference();
-            if (referencedMessage.author.id === client.user.id) chatGpt(message, `${message.member.nickname} répond à ton message "${referencedMessage.content}" : `)
+            if (referencedMessage.author.id === client.user.id) chatService.handleMessage(message, `${message.member.nickname} répond à ton message "${referencedMessage.content}" : `)
         } catch (error) {
             console.error('Failed to fetch the referenced message:', error);
         }
@@ -149,97 +137,5 @@ client.on(Events.GuildMemberAdd, async (member) => {
         console.log(err);
     }
 });
-
-async function chatGpt(message, variation) {
-    message.channel.sendTyping();
-
-    const messageMemory = getMemoryForUser(message.author.id);
-
-    messageMemory.push({
-        role: `user`,
-        content: `${variation} : "${message.content.replace("<@959427012194349088>", "")}"`
-    })
-
-    if (messageMemory.length >= 30) {
-        messageMemory.splice(-2, 1);
-        messageMemory.splice(-3, 1);
-    }
-
-    async function main() {
-        const control = {
-            role: 'system',
-            content: 'Return ONLY a JSON object with keys: message (string), faith_change (int, optional and must be one of -1, 0, 1), update (boolean, optional), punish (boolean, optional). The "faith_change" must be either -1 (decrease by one), 0 (leave the level unchanged) or 1 (increase by one)  do NOT return any other numbers. The "punish" flag should ONLY be set to true in the most extreme cases where the person\'s soul is beyond redemption - severe blasphemy or repeated unforgivable acts. Use this sparingly and only when absolutely necessary. If you cannot return a valid JSON object, return plain JSON with keys message and update=false.'
-        };
-
-        const completion = await ai.sendChat([control, ...messageMemory], process.env.AI_MODEL || 'gpt-3.5-turbo');
-
-        const raw = completion.choices[0].message.content;
-        let parsed = null;
-        
-        let cleanedRaw = raw.trim();
-        if (cleanedRaw.startsWith('```')) {
-            cleanedRaw = cleanedRaw.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
-        }
-        
-        try {
-            parsed = JSON.parse(cleanedRaw);
-        } catch (err) {
-            parsed = { message: cleanedRaw, faith_change: 0, update: false };
-        }
-
-        const replyText = parsed.message || 'Erreur : aucun message reçu du divin Capybara.';
-        await message.reply(replyText);
-        
-        messageMemory.push({ role: `assistant`, content: `${raw}` });
-
-        if (parsed.update && typeof parsed.faith_change !== 'undefined' && parsed.faith_change !== 0) {
-            try {
-                const cur = await db.getFaith(message.guild.id, message.author.id);
-                const last = new Date(cur?.updated_at || 0);
-                const now = new Date();
-                const minutes = parseInt(process.env.FAITH_UPDATE_COOLDOWN_MINUTES || '60', 10);
-                if ((now - last) / 60000 >= minutes) {
-                    await db.addFaith(message.guild.id, message.author.id, parsed.faith_change);
-                }
-            } catch (e) {
-                console.error('Error updating faith:', e);
-            }
-        }
-
-        if (parsed.punish) {
-            try {
-                console.log('un membre doit être puni (model indiqué punish:true)');
-                const roleId = settings.punishRoleId;
-                if (roleId) {
-                    const role = message.guild.roles.cache.get(roleId);
-                    if (role) await message.member.roles.add(role);
-                }
-
-                const phrases = settings.punishMessages;
-                if (phrases.length > 0) {
-                    const phrase = phrases[Math.floor(Math.random() * phrases.length)];
-                    try {
-                        await message.author.send(`${phrase}`);
-                    } catch (dmErr) {
-                        console.warn(`Impossible d'envoyer un DM à ${message.author.tag}: ${dmErr.message}`);
-                    }
-                }
-
-                messageMemory.push({
-                    role: `user`,
-                    content: `LOG : ${message.author.nickname} a été puni (punish=true).`
-                });
-            } catch (err) {
-                console.error('Erreur lors de l\'application de la punition :', err);
-            }
-        }
-    }
-
-    try {
-        await main();
-    } catch (err) {
-        console.log(err);
-    }
-}
 
 module.exports = { client };
