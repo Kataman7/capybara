@@ -2,7 +2,7 @@ const { PRODUCTION_CHAIN } = require('../productionChain');
 
 // Copy of tuning constants from resourceRepository (keep in sync)
 const ALPHA = 0.65; // production concavity
-const GLOBAL_SCORE_SCALE = 1.0;
+const GLOBAL_SCORE_SCALE = 1.43;
 const GAMMA = 0.45; // score softening exponent
 
 function computeScore(resources) {

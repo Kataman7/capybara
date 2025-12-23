@@ -165,7 +165,7 @@ function calculateProductionScore(resources) {
   // We compute the product of costs up to each level, then take a fractional power (GAMMA)
   // to reduce exponential growth while preserving order-of-magnitude differences.
   // Example: GAMMA=0.45 tends to make a single top-level unit worth several millions.
-  const GLOBAL_SCORE_SCALE = 1.0; // adjust globally if needed
+  const GLOBAL_SCORE_SCALE = 1.43; // adjust globally if needed (calibrated to make 'one of each level' ≈ 10M)
   const GAMMA = 0.45; // in (0,1): lower -> more compression
 
   let runningMultiplier = 1;
