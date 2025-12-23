@@ -75,4 +75,8 @@
     "market_intrigue": "Intrigue marché pastèques. JSON :\n{\\\"scenario\\\":\\\"Description en 2 phrases complètes\\\",\\\"choices\\\":[{\\\"text\\\":\\\"Approche commerciale en français naturel (6-10 mots)\\\",\\\"consequence\\\":\\\"Impact réputation/contrats en 1-2 phrases complètes\\\",\\\"base_delta\\\":-15 à 15,\\\"ecology_delta\\\":-5 à 5},{\\\"text\\\":\\\"Autre approche en français naturel (6-10 mots)\\\",\\\"consequence\\\":\\\"Impact réputation/contrats en 1-2 phrases complètes\\\",\\\"base_delta\\\":-15 à 15,\\\"ecology_delta\\\":-5 à 5}]}\nNégociations ambiguës (transparence vs ruse). Opportunités risquées. ecology_delta selon éthique commerciale/impact environnemental. Optionnel blessing {\\\"multiplier\\\":2,\\\"charges\\\":1-2,\\\"message\\\":\\\"phrase complète\\\"}.",
     "ancestral_memory": "Vision nocturne ancêtres capybaras. JSON :\n{\\\"scenario\\\":\\\"Description en 2 phrases complètes\\\",\\\"choices\\\":[{\\\"text\\\":\\\"Réponse respectueuse en français naturel (6-10 mots)\\\",\\\"consequence\\\":\\\"Vision/bénédiction en 1-2 phrases complètes\\\",\\\"base_delta\\\":-15 à 15,\\\"ecology_delta\\\":-5 à 5},{\\\"text\\\":\\\"Autre réponse en français naturel (6-10 mots)\\\",\\\"consequence\\\":\\\"Vision/bénédiction en 1-2 phrases complètes\\\",\\\"base_delta\\\":-15 à 15,\\\"ecology_delta\\\":-5 à 5}]}\nLes 2 semblent respectueux. Conséquences révèlent honneur aux anciens. ecology_delta selon harmonie avec nature/traditions. Optionnel blessing {\\\"multiplier\\\":2,\\\"charges\\\":1-2,\\\"message\\\":\\\"phrase complète\\\"}."
   }
+  ,
+  "game": {
+    "reset_threshold": 10000000
+  }
 }
