@@ -1,5 +1,17 @@
 const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
 
+function pickCapyFromSettings(settings) {
+  const cfg = settings.lootbox && Array.isArray(settings.lootbox.capybaras) ? settings.lootbox.capybaras : [];
+  if (!cfg.length) return null;
+  const total = cfg.reduce((s, c) => s + (c.weight || 1), 0);
+  let r = Math.random() * total;
+  for (const c of cfg) {
+    r -= (c.weight || 1);
+    if (r <= 0) return c.id;
+  }
+  return cfg[cfg.length - 1].id;
+}
+
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('reset')
@@ -10,7 +22,8 @@ module.exports = {
     const guildId = interaction.guild.id;
     const discordId = interaction.user.id;
 
-    await interaction.deferReply({ ephemeral: true });
+    // make replies public (not ephemeral)
+    await interaction.deferReply();
 
     try {
       const resources = await db.getProduction(guildId, discordId);
@@ -42,7 +55,7 @@ Le reset remettra à zéro tes productions et pastèques (tu pourras conserver d
 
       collector.on('collect', async (ci) => {
         if (ci.user.id !== discordId) {
-          return ci.reply({ content: 'Ce bouton n\'est pas pour toi.', ephemeral: true });
+          return ci.reply({ content: 'Ce bouton n\'est pas pour toi.' , ephemeral: true });
         }
 
         await ci.deferUpdate();
@@ -54,8 +67,13 @@ Le reset remettra à zéro tes productions et pastèques (tu pourras conserver d
             new ButtonBuilder().setCustomId(yesId).setLabel('Oui — reset').setStyle(ButtonStyle.Danger).setDisabled(true),
             new ButtonBuilder().setCustomId(noId).setLabel('Non — annuler').setStyle(ButtonStyle.Secondary).setDisabled(true)
           );
-          await msg.edit({ components: [disabled] });
-          await interaction.followUp({ content: 'Reset annulé.', ephemeral: true });
+          try {
+            await msg.edit({ components: [disabled] });
+          } catch (e) {
+            // ignore Unknown Message (10008) and continue
+            if (!(e && e.code === 10008)) console.error('msg.edit error:', e);
+          }
+          await interaction.followUp({ content: 'Reset annulé.' });
           collector.stop('cancelled');
           return;
         }
@@ -63,22 +81,51 @@ Le reset remettra à zéro tes productions et pastèques (tu pourras conserver d
         // Perform the reset via repository method (keeps SQL inside DB layer)
         await db.resetProduction(guildId, discordId);
 
+        // Grant lootbox vouchers on reset (to be opened later)
+        try {
+          // support configurable random range: reset_grant_min / reset_grant_max (fallback to default_grant_on_reset)
+          let grantCount = 1;
+          if (settings.lootbox) {
+            const cfg = settings.lootbox;
+            if (typeof cfg.reset_grant_min === 'number' || typeof cfg.reset_grant_max === 'number') {
+              const min = parseInt(cfg.reset_grant_min || 1, 10);
+              const max = parseInt(cfg.reset_grant_max || (cfg.default_grant_on_reset || 1), 10);
+              const lo = Math.min(min, max);
+              const hi = Math.max(min, max);
+              grantCount = Math.floor(Math.random() * (hi - lo + 1)) + lo;
+            } else {
+              grantCount = cfg.default_grant_on_reset ? parseInt(cfg.default_grant_on_reset, 10) : 1;
+            }
+          }
+
+          if (grantCount > 0) await db.grantLootVoucher(guildId, discordId, grantCount);
+          if (grantCount > 0) {
+            await interaction.followUp({ content: `Tu as reçu **${grantCount}** clé(s) de lootbox à ouvrir avec "/lootbox".` });
+          }
+        } catch (err) {
+          console.error('Error granting loot vouchers on reset:', err);
+        }
+
         const disabled = new ActionRowBuilder().addComponents(
           new ButtonBuilder().setCustomId(yesId).setLabel('Oui — reset').setStyle(ButtonStyle.Danger).setDisabled(true),
           new ButtonBuilder().setCustomId(noId).setLabel('Non — annuler').setStyle(ButtonStyle.Secondary).setDisabled(true)
         );
 
-        await msg.edit({ components: [disabled] });
-        await interaction.followUp({ content: `Reset effectué ✅ — ton compteur de prestige a été incrémenté.`, ephemeral: true });
+        try {
+          await msg.edit({ components: [disabled] });
+        } catch (e) {
+          if (!(e && e.code === 10008)) console.error('msg.edit error:', e);
+        }
+        await interaction.followUp({ content: `Reset effectué ✅ — ton compteur de prestige a été incrémenté.` });
 
         collector.stop('done');
       });
 
-      collector.on('end', (_collected, reason) => {
+      collector.on('end', async (_collected, reason) => {
         if (reason !== 'done' && reason !== 'cancelled') {
           try {
-            msg.edit({ components: [] }).catch(() => {});
-            interaction.followUp({ content: 'Temps écoulé — reset annulé.', ephemeral: true }).catch(() => {});
+            try { await msg.edit({ components: [] }); } catch(_) {}
+            try { await interaction.followUp({ content: 'Temps écoulé — reset annulé.' }); } catch (_) {}
           } catch (err) {
             // ignore
           }

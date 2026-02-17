@@ -79,4 +79,23 @@
   "game": {
     "reset_threshold": 10000000
   }
+  ,
+  "lootbox": {
+    "default_grant_on_reset": 1,
+    "reset_grant_min": 5,
+    "reset_grant_max": 10,    "purchase_base_price": 10,
+    "purchase_scale_divisor": 1000000,
+    "purchase_max_multiplier": 5,    "slot_grant_chance": 0.002,
+    "message_grant_chance": 0.0,
+    "voice_join_grant": 0,
+    "hourly_active_grant": 0,
+    "capybaras": [
+      { "id": "capytherion", "name": "Capytherion", "weight": 1, "autofarm": 1, "duplicate_bonus_pct": 0.05, "triggers": ["message"] },
+      { "id": "capylumia", "name": "CapyLumia", "weight": 1, "autofarm": 3, "duplicate_bonus_pct": 0.06, "triggers": ["farm"] },
+      { "id": "capyvalon", "name": "CapyValon", "weight": 1, "autofarm": 10, "duplicate_bonus_pct": 0.08, "triggers": ["auto"] },
+      { "id": "capyseraph", "name": "CapySeraph", "weight": 1, "autofarm": 1, "duplicate_bonus_pct": 0.04, "triggers": ["join"] },
+      { "id": "capyzyra", "name": "CapyZyra", "weight": 1, "autofarm": 2, "duplicate_bonus_pct": 0.05, "triggers": ["voice"] },
+      { "id": "capymirion", "name": "CapyMirion", "weight": 1, "autofarm": 2, "duplicate_bonus_pct": 0.05, "triggers": ["slot"] }
+    ]
+  }
 }

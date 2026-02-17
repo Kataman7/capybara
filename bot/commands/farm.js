@@ -201,7 +201,15 @@ module.exports = {
                 // Appliquer le vrai cooldown maintenant qu'un choix a été fait
                 watermelonCooldowns.set(key, Date.now());
                 pendingFarms.delete(key);
-                
+                // Trigger capybaras that listen to 'farm' events (owners gain autofarm when someone farms)
+                try {
+                    if (context && typeof context.applyCapyTrigger === 'function') {
+                        context.applyCapyTrigger('farm', interaction.guild.id, interaction.user.id);
+                    }
+                } catch (err) {
+                    console.error('Error applying capy trigger on farm:', err);
+                }
+
                 collector.stop('done');
             });
 

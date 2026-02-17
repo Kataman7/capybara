@@ -4,6 +4,7 @@ const resourceRepository = require('./repositories/resourceRepository');
 const leaderboardRepository = require('./repositories/leaderboardRepository');
 const tradeRepository = require('./repositories/tradeRepository');
 const blessingRepository = require('./repositories/blessingRepository');
+const lootRepository = require('./repositories/lootRepository');
 
 module.exports = {
     query,
@@ -12,5 +13,6 @@ module.exports = {
     ...resourceRepository,
     ...leaderboardRepository,
     ...tradeRepository,
-    ...blessingRepository
+    ...blessingRepository,
+    ...lootRepository
 };

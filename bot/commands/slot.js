@@ -21,7 +21,9 @@ const BASE_SLOT_WEIGHTS = [
     { id: 'terraformeur_fruito_spherique', weight: 0.1 }, // 🪐
     { id: 'architecte_quantique_melon', weight: 0.03 },   // 🔮
     { id: 'matrice_originelle_fruits', weight: 0.008 },   // ✨
-    { id: 'coeur_cosmique_watermelon', weight: 0.002 }    // 💫 ultra rare
+    { id: 'coeur_cosmique_watermelon', weight: 0.002 },   // 💫 ultra rare
+    // Very rare: a lootbox voucher (clé) which can be opened with /lootbox
+    { id: 'lootbox_voucher', weight: 0.05 }
 ];
 
 // Calculer les poids ajustés selon foi et écologie
@@ -60,10 +62,12 @@ function getRandomItem(faithLevel, ecologyPoints) {
     for (const item of adjustedWeights) {
         random -= item.weight;
         if (random <= 0) {
-            return {
-                item: PRODUCTION_CHAIN.find(p => p.id === item.id),
-                adjustedWeights
-            };
+            const found = PRODUCTION_CHAIN.find(p => p.id === item.id);
+            if (found) {
+                return { item: found, adjustedWeights };
+            }
+            // synthetic item (e.g. lootbox_voucher) if not in PRODUCTION_CHAIN
+            return { item: { id: item.id, name: 'Clé de lootbox', emoji: '🔑' }, adjustedWeights };
         }
     }
     return { 
@@ -88,7 +92,8 @@ module.exports = {
         .setName('slot')
         .setDescription('🎰 Machine à sous - Tente ta chance toutes les 5 minutes !'),
 
-    async execute(interaction, { db }) {
+    async execute(interaction, context) {
+        const { db, settings } = context;
         const key = `${interaction.guild.id}:${interaction.user.id}`;
         const now = Date.now();
         const last = slotCooldowns.get(key);
@@ -149,7 +154,7 @@ module.exports = {
             await message.edit({ embeds: [spinEmbed] });
         }
 
-        // Pause dramatique
+            // Pause dramatique
         await new Promise(resolve => setTimeout(resolve, 800));
 
         // Ajouter la ressource gagnée
@@ -173,10 +178,32 @@ module.exports = {
                 .setColor(0x00FF00);
             
             await message.edit({ embeds: [finalEmbed] });
+
+            // Note: 'lootbox_voucher' is also included in weights and handled below.
         } else {
             // Pour les autres ressources, on donne 1
-            await db.updateResource(interaction.guild.id, interaction.user.id, result.id, 
-                (await db.getProduction(interaction.guild.id, interaction.user.id))[result.id] + 1);
+                // Special case: lootbox voucher
+                if (result.id === 'lootbox_voucher') {
+                    try {
+                        await db.grantLootVoucher(interaction.guild.id, interaction.user.id, 1);
+                        const finalEmbed = new EmbedBuilder()
+                            .setTitle('🎰 Machine à Sous du Capybara')
+                            .setDescription(generateFrame(resultEmoji, resultEmoji, resultEmoji))
+                            .addFields(
+                                { name: '🎉 Résultat', value: `Tu as gagné **1x 🔑 Clé de lootbox** !` }
+                            )
+                            .setColor(0xFFD700);
+                        await message.edit({ embeds: [finalEmbed] });
+                        await interaction.followUp({ content: `🎁 Chance ! Tu as reçu une **clé de lootbox** (ouvre-la avec /lootbox).` });
+                    } catch (err) {
+                        console.error('Error granting loot voucher on slot:', err);
+                        await message.edit({ embeds: [new EmbedBuilder().setTitle('🎰 Machine à Sous du Capybara').setDescription('Erreur lors de la délivrance de la clé.').setColor(0xFF0000)] });
+                    }
+                    return;
+                }
+
+                await db.updateResource(interaction.guild.id, interaction.user.id, result.id, 
+                    (await db.getProduction(interaction.guild.id, interaction.user.id))[result.id] + 1);
             
             // Calculer la rareté avec les poids ajustés
             const weightInfo = adjustedWeights.find(w => w.id === result.id);
