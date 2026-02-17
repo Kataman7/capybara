@@ -256,7 +256,14 @@ client.once(Events.ClientReady, async () => {
                         totalAuto += def.autofarm * count * multiplier;
                     }
                     if (totalAuto > 0) {
+                        // add watermelons produced by capy (as before)
                         await db.addWatermelon(guildId, userId, Math.floor(totalAuto), true);
+                        // also apply full production cascade so owners receive the same effect as /farm
+                        try {
+                            await db.applyProduction(guildId, userId);
+                        } catch (e) {
+                            console.error('Hourly auto trigger: applyProduction failed for', guildId, userId, e);
+                        }
                     }
                 }
             } catch (err) {
