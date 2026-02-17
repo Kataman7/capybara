@@ -162,7 +162,15 @@ async function applyCapyTrigger(eventType, guildId, actorUserId) {
             }
 
             if (totalAuto > 0) {
+                // add watermelons produced by capy
                 await db.addWatermelon(gId, ownerId, Math.floor(totalAuto), true);
+                // apply full production cascade (same as if the player had done /farm)
+                // This converts producer counts into their produced resources.
+                try {
+                    await db.applyProduction(gId, ownerId);
+                } catch (e) {
+                    console.error('applyCapyTrigger: applyProduction failed for', gId, ownerId, e);
+                }
             }
         }
     } catch (err) {
